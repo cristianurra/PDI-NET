@@ -25,14 +25,14 @@ while True:
     if not ret:
         break
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
     cuerdas_binario = cv2.adaptiveThreshold(
         src=blurred,
         maxValue=255,
         adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
         thresholdType=cv2.THRESH_BINARY_INV,
         blockSize=15,
-        C=2
+        C=1
     )
     cuerdas_bgr = cv2.cvtColor(cuerdas_binario, cv2.COLOR_GRAY2BGR)
     #out.write(cuerdas_bgr)
