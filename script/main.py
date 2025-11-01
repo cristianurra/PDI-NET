@@ -1,75 +1,46 @@
+ 
 import cv2
-import sys
 import numpy as np
-
-# Importar las funciones que acabamos de definir en processing.py
-try:
-    from processing import procesarFrame, calcularNitidez
-except ImportError:
-    print("Error: No se pudo encontrar el archivo 'processing.py'.", file=sys.stderr)
-    print("Asegúrate de que 'processing.py' esté en el mismo directorio.", file=sys.stderr)
-    sys.exit(1)
-
+from config import NOM_VID, UMB_DIST, N_VEL_PR, Q_X, Q_Y, CM_POR_PX, Tracker
+from processing import proc_seg, get_cns
+from drawing import dib_ayu, dib_mov, dib_map, show_v
 
 def main():
-    # Comprobar argumentos de línea de comandos
-    if len(sys.argv) < 2:
-        print("Error: Debes proporcionar una fuente de video.", file=sys.stderr)
-        print(f"Uso: python {sys.argv[0]} <fuente_de_video>", file=sys.stderr)
-        sys.exit(1) 
+    cap = cv2.VideoCapture(NOM_VID)
+    INI_FR = 0
+    cap.set(cv2.CAP_PROP_POS_FRAMES, INI_FR)
+    ret, frame = cap.read()
 
-    # Abrir el video
-    video_source = sys.argv[1]
-    vid = cv2.VideoCapture(video_source)
+    if not ret:
+        print("Error: ")
+        return
+    w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    n_w, n_h = w // 2, h // 2
+    q_w, q_h = w // Q_X, h // Q_Y
+    k_uni = np.ones((5, 5), np.uint8)
+    k_limp = np.ones((3, 3), np.uint8)
+    tracker = Tracker(UMB_DIST, N_VEL_PR)
+    pos_m_x, pos_m_y = 0.0, 0.0
+    hist_pts = [(0.0, 0.0)]
+    while ret:
+        cns_filt = proc_seg(frame, k_uni, k_limp)
+        cns_act = get_cns(cns_filt, q_w, q_h)
+        objs = tracker.update_and_get(cns_act)
+        dib_ayu(frame, w, h, q_w, q_h)
+        del_p_x, del_p_y = dib_mov(frame, objs, w, h)
+        del_c_x = del_p_x * CM_POR_PX
+        del_c_y = -del_p_y * CM_POR_PX
 
-
-    if not vid.isOpened():
-        print(f"Error abriendo la fuente de video: {video_source}", file=sys.stderr)
-        sys.exit(1)
-
-    # Crear ventanas
-    cv2.namedWindow("Video izquierdo procesado", cv2.WINDOW_NORMAL)
-    cv2.namedWindow("Video derecho procesado", cv2.WINDOW_NORMAL)
-   
-    UMBRAL_NITIDEZ = 200
-
-    while True:
-        ret, img = vid.read()
-
-        if not ret:
-            print("Fin del video.")
+        pos_m_x += del_c_x
+        pos_m_y += del_c_y
+        hist_pts.append((pos_m_x, pos_m_y))
+        canv_m = dib_map(hist_pts, pos_m_x, pos_m_y)
+        if show_v(frame, canv_m, n_w, n_h):
             break
 
-        # Dividir la imagen
-        height, width = img.shape[:2]
-        mid_x = width // 2 
-        
-        img_izq = img[:, 0:mid_x]
-        img_der = img[:, mid_x:width]
-
-        # Procesar ambas mitades
-        proc_izq = procesarFrame(img_izq)
-        nitidez_izq = calcularNitidez(proc_izq)
-
-        proc_der = procesarFrame(img_der)
-        nitidez_der = calcularNitidez(proc_der)
-
-        
-        if nitidez_izq < UMBRAL_NITIDEZ or nitidez_der < UMBRAL_NITIDEZ:
-            continue # Saltar este frame
-      
-        print(f"Nitidez izq: {nitidez_izq}")
-        print(f"Nitidez der: {nitidez_der}")
-     
-        cv2.imshow("Video izquierdo procesado", proc_izq)
-        cv2.imshow("Video derecho procesado", proc_der)
-
-        # Espera 10ms por una tecla. Si se presiona CUALQUIER tecla (!= -1), rompe el bucle.
-        if cv2.waitKey(10) != -1:
-            break
-      
-    vid.release()
+        ret, frame = cap.read()
+    cap.release()
     cv2.destroyAllWindows()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
