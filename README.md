@@ -32,6 +32,7 @@ Este ciclo se repite para cada imagen del video (`while ret`):
 ***
 
 ![Imagen binaria](https://github.com/cristianurra/PDI-NET/blob/main/imagenes/threshold.png)
+![Imagen Stereo](https://github.com/cristianurra/PDI-NET/blob/main/imagenes/stereo.png)
 
 ## III. Cierre (Fin de Ejecución)
 
