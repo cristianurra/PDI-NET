@@ -31,6 +31,8 @@ Este ciclo se repite para cada imagen del video (`while ret`):
 
 ***
 
+![Imagen binaria](https://github.com/cristianurra/PDI-NET/blob/main/threshold.png)
+
 ## III. Cierre (Fin de Ejecución)
 
 El programa termina cuando el usuario presiona la tecla **'q'** o se acaba el video. Se liberan los recursos (`cap.release()`) y se cierran las ventanas (`cv2.destroyAllWindows()`).
