@@ -1,23 +1,31 @@
- 
+import cv2
 import numpy as np
-import math
-import random
 
 NOM_VID = 'stereonr.mp4'
 RAD_PUN = 6
-UMB_DIST = 50
-N_VEL_PR = 3
+UMB_DIST = 75
+N_VEL_PR = 5
 PORC_MOS = 1.0
-MIN_SUPERVIVENCIA_FR = 10
+MIN_SUPERVIVENCIA_FR = 20
+FRAMES_MAX_ESTATICO = 3
 Q_X = 6
 Q_Y = 5
-Q_ACT = [(1, 1), (1, 4), (2, 1), (2, 4), (3, 1), (3, 4)]
-SEP_CM = 6.0
+Q_ACT_BASE = [(1, 1), (1, 4), (2, 1), (2, 4), (3, 1), (3, 4)]
+SEP_CM = 4.0
 SEP_PX_EST = 10
 CM_POR_PX = SEP_CM / SEP_PX_EST
+
+BASELINE_CM = 7.0
+FOCAL_PIX = 800.0
+MIN_DEPTH_CM = 20.0
+MAX_DEPTH_CM = 300.0
+N_DEPTH_PR = 5
+MIN_DISPARITY = 5
+MAX_DISPARITY = 150
+Y_TOLERANCE = 3
+
 ESC_VEC = 5
-MAP_CAN_SZ = 400
-MAP_DISP_SZ = 300
+MAP_CAN_SZ = 800
 MAP_PAD_PX = 40
 MAP_ESC_V = 5.0
 C_ACT = (0, 255, 0)
@@ -27,58 +35,15 @@ C_VEC_LR = (255, 255, 255)
 C_CAM = (0, 255, 255)
 C_MAP_FND = (0, 0, 0)
 C_MAP_TXT = (255, 255, 255)
-C_MAP_TRA = (150, 150, 150)
 C_MAP_ACT = (0, 0, 255)
+C_VEC_PUNTO = (0, 255, 255)
 
+FIXED_GRID_SIZE_CM = 20.0
+RECT_SZ_CM_FALLBACK = 30.0
+RECT_MARGIN_CM = 5.0
 
-class Tracker:
-    def __init__(self, max_d, len_v):
-        self.objs = []
-        self.prox_id = 0
-        self.max_d = max_d
-        self.len_v = len_v
+ORB_DETECTOR = cv2.ORB_create(nfeatures=500, scaleFactor=1.2, nlevels=8)
+FLANN_MATCHER = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
-    def update_and_get(self, cns_nue):
-
-        from utils import dist
-
-        usado_n = [False] * len(cns_nue)
-        objs_sobrev = []
-
-        for obj in self.objs:
-            mejor_i, min_d = -1, self.max_d
-
-            for i, c_nue in enumerate(cns_nue):
-                if not usado_n[i] and dist(obj['pos'], c_nue) < min_d:
-                    min_d = dist(obj['pos'], c_nue)
-                    mejor_i = i
-
-            if mejor_i != -1:
-                pos_nue = cns_nue[mejor_i]
-                vel = (pos_nue[0] - obj['pos'][0], pos_nue[1] - obj['pos'][1])
-
-                obj['pos'] = pos_nue
-                obj['hist_vel'].append(vel)
-                if len(obj['hist_vel']) > self.len_v:
-                    obj['hist_vel'].pop(0)
-
-                obj['supervivencia_fr'] += 1
-
-                usado_n[mejor_i] = True
-                objs_sobrev.append(obj)
-            else:
-                pass
-
-        for i, c_nue in enumerate(cns_nue):
-            if not usado_n[i]:
-                objs_sobrev.append({
-                    'id': self.prox_id,
-                    'pos': c_nue,
-                    'hist_vel': [(0, 0)],
-                    'supervivencia_fr': 1,
-                    'color': (np.random.randint(0, 256), np.random.randint(0, 256), np.random.randint(0, 256))
-                })
-                self.prox_id += 1
-
-        self.objs = objs_sobrev
-        return self.objs
+K_UNI = np.ones((5, 5), np.uint8)
+K_LIMP = np.ones((3, 3), np.uint8)

@@ -1,8 +1,26 @@
 import math
-from config import MAP_PAD_PX, MAP_ESC_V
+import numpy as np
+import cv2
+from config import MIN_DEPTH_CM, MAX_DEPTH_CM, MAP_ESC_V, MAP_PAD_PX # ¡CORREGIDO!
 
 def dist(p1, p2):
     return math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
+
+def depth_to_color(depth_cm):
+    if depth_cm <= 0 or depth_cm >= MAX_DEPTH_CM:
+        return (255, 0, 0)
+
+    normalized_depth = np.clip(
+        (depth_cm - MIN_DEPTH_CM) / (MAX_DEPTH_CM - MIN_DEPTH_CM),
+        0.0,
+        1.0
+    )
+
+    R = int(255 * (1 - normalized_depth))
+    B = int(255 * normalized_depth)
+    G = 0
+
+    return (B, G, R)
 
 def map_trans(hist_m, m_w, m_h):
     if not hist_m:
@@ -27,3 +45,21 @@ def map_trans(hist_m, m_w, m_h):
         esc_m = MAP_ESC_V
 
     return esc_m, off_x, off_y
+
+def normalize_cell_view(current_image, cell_target_size=(100, 100)):
+    try:
+        normalized_image = cv2.resize(current_image, cell_target_size, interpolation=cv2.INTER_AREA)
+        return normalized_image
+    except Exception:
+        return current_image
+
+def register_image_to_map(current_image, existing_image):
+    if existing_image is None or current_image is None or existing_image.shape != current_image.shape:
+        return current_image
+
+    try:
+        fused_image = cv2.addWeighted(existing_image, 0.5, current_image, 0.5, 0)
+        return fused_image
+
+    except Exception:
+        return existing_image
