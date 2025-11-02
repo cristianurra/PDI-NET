@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from config import Q_ACT_BASE, Y_TOLERANCE, MIN_DISPARITY, MAX_DISPARITY # ¡CORREGIDO!
+from config import Q_ACT_BASE, Y_TOLERANCE, MIN_DISPARITY, MAX_DISPARITY 
 
 def proc_seg(frame, k_uni, k_limp):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
