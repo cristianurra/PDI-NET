@@ -8,35 +8,51 @@ from config import ( # ¡CORREGIDO!
 from utils import map_trans, depth_to_color # ¡CORREGIDO!
 
 def dib_escala_profundidad(frame, w, h):
-    BAR_W, BAR_H = 30, 200
+    BAR_W, BAR_H = 50, 300
     BAR_X = w - BAR_W - 20
-    BAR_Y = h // 2 - BAR_H // 2
+    BAR_Y = max(10, h // 2 - BAR_H // 2)
 
     bar_img = np.zeros((BAR_H, BAR_W, 3), dtype=np.uint8)
-
     for i in range(BAR_H):
         norm_val = 1.0 - (i / BAR_H)
         depth_cm = MIN_DEPTH_CM + norm_val * (MAX_DEPTH_CM - MIN_DEPTH_CM)
         color = depth_to_color(depth_cm)
         bar_img[i, :, :] = color
 
-    frame[BAR_Y : BAR_Y + BAR_H, BAR_X : BAR_X + BAR_W] = bar_img
+    y_end = min(h, BAR_Y + BAR_H)
+    x_end = min(w, BAR_X + BAR_W)
+    if BAR_Y < y_end and BAR_X < x_end:
+        frame[BAR_Y:y_end, BAR_X:x_end] = bar_img[0:(y_end - BAR_Y), 0:(x_end - BAR_X)]
 
     font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.6
-    font_thickness = 1
+    font_scale = 0.8
+    font_thickness = 2
     text_color = (255, 255, 255)
 
     text_cerca = f"{MIN_DEPTH_CM:.0f} cm"
-    cv2.putText(frame, text_cerca, (BAR_X - 100, BAR_Y + 10), font, font_scale, text_color, font_thickness)
-    cv2.putText(frame, "CERCA (ROJO)", (BAR_X - 100, BAR_Y - 10), font, font_scale, text_color, font_thickness)
-
     text_lejos = f"{MAX_DEPTH_CM:.0f} cm"
-    cv2.putText(frame, text_lejos, (BAR_X - 100, BAR_Y + BAR_H), font, font_scale, text_color, font_thickness)
-    cv2.putText(frame, "LEJOS (AZUL)", (BAR_X - 100, BAR_Y + BAR_H + 20), font, font_scale, text_color, font_thickness)
+    label_cerca = "CERCA (ROJO)"
+    label_lejos = "LEJOS (AZUL)"
 
-    cv2.line(frame, (BAR_X - 5, BAR_Y), (BAR_X, BAR_Y), text_color, 2)
-    cv2.line(frame, (BAR_X - 5, BAR_Y + BAR_H), (BAR_X, BAR_H + BAR_H), text_color, 2)
+    (tw_c, th_c), _ = cv2.getTextSize(text_cerca, font, font_scale, font_thickness)
+    (tw_l, th_l), _ = cv2.getTextSize(text_lejos, font, font_scale, font_thickness)
+    (tw_lbl_c, th_lbl_c), _ = cv2.getTextSize(label_cerca, font, font_scale, font_thickness)
+    (tw_lbl_l, th_lbl_l), _ = cv2.getTextSize(label_lejos, font, font_scale, font_thickness)
+
+    text_x = max(5, BAR_X - 10 - max(tw_c, tw_l, tw_lbl_c, tw_lbl_l))
+
+    y_cerca = min(h - 5, max(th_c + 5, BAR_Y + 15))
+    y_label_cerca = max(5 + th_lbl_c, BAR_Y - 15)
+    y_lejos = min(h - 5, BAR_Y + BAR_H)
+    y_label_lejos = min(h - 5, BAR_Y + BAR_H + 25)
+
+    cv2.putText(frame, text_cerca, (text_x, y_cerca), font, font_scale, text_color, font_thickness)
+    cv2.putText(frame, label_cerca, (text_x, max(5, y_label_cerca)), font, font_scale, text_color, font_thickness)
+    cv2.putText(frame, text_lejos, (text_x, y_lejos), font, font_scale, text_color, font_thickness)
+    cv2.putText(frame, label_lejos, (text_x, min(h - 5, y_label_lejos)), font, font_scale, text_color, font_thickness)
+
+    cv2.line(frame, (max(0, BAR_X - 5), BAR_Y), (BAR_X, BAR_Y), text_color, 2)
+    cv2.line(frame, (max(0, BAR_X - 5), BAR_Y + BAR_H), (BAR_X, BAR_Y + BAR_H), text_color, 2)
 
 
 def dib_mov(frame, objs, w, h, depth_cm):
@@ -187,9 +203,10 @@ def dib_map(hist_celdas_vis, pos_m_x, pos_m_y, fixed_grid_sz_cm, rect_sz_cm_actu
     txt_pos = f"X: {pos_m_x:.2f} cm, Y: {pos_m_y:.2f} cm"
     txt_esc = f"Escala: 1:{1.0/esc_m:.2f} px/cm"
 
-    cv2.putText(canv_m, "MAPA DE ZONAS VISITADAS (CM) - IMAGEN POR VISTA", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, C_MAP_TXT, 1)
-    cv2.putText(canv_m, txt_pos, (10, sz - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, C_MAP_TXT, 1)
-    cv2.putText(canv_m, txt_esc, (sz - 150, sz - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, C_MAP_TXT, 1)
+    # Textos del mapa con tamaño grande
+    cv2.putText(canv_m, "MAPA DE ZONAS VISITADAS (CM) - IMAGEN POR VISTA", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, C_MAP_TXT, 3)
+    cv2.putText(canv_m, txt_pos, (10, sz - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, C_MAP_TXT, 2)
+    cv2.putText(canv_m, txt_esc, (sz - 360, sz - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, C_MAP_TXT, 2)
 
     return cv2.resize(canv_m, (map_w_display, map_h_display))
 
