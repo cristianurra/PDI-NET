@@ -1,3 +1,4 @@
+import os
 import cv2
 import numpy as np
 from config import (
@@ -9,6 +10,8 @@ from stereo_processing import proc_seg, get_cns
 from drawing import dib_escala_profundidad, dib_mov, dib_ayu, dib_map, show_compuesta
 from utils import normalize_cell_view, register_image_to_map
 
+os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+
 def main():
 
     rect_sz_cm_actual = RECT_SZ_CM_FALLBACK
@@ -16,7 +19,14 @@ def main():
     cap = cv2.VideoCapture(NOM_VID)
 
     if not cap.isOpened():
-        print(f"ERROR: No se pudo abrir el video '{NOM_VID}'. Verifique la ruta del archivo.")
+        try:
+            cap.release()
+        except Exception:
+            pass
+        cap = cv2.VideoCapture(NOM_VID, cv2.CAP_FFMPEG)
+
+    if not cap.isOpened():
+        print(f"ERROR: No se pudo abrir el video '{NOM_VID}'.")
         return
 
     w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
