@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-NOM_VID = 'stereonr.mp4'
+NOM_VID = 'stereonr_h264.mp4'
 RAD_PUN = 6
 UMB_DIST = 75
 N_VEL_PR = 5
@@ -10,12 +10,13 @@ MIN_SUPERVIVENCIA_FR = 20
 FRAMES_MAX_ESTATICO = 3
 Q_X = 6
 Q_Y = 5
-Q_ACT_BASE = [(1, 1), (1, 4), (2, 1), (2, 4), (3, 1), (3, 4)]
-SEP_CM = 4.0
-SEP_PX_EST = 10
+Q_ACT_BASE = [(1, 1), (1, 4), (2, 1), (2, 4), (3, 1), (3, 4)]  # Original: solo 6 cuadrantes
+#Q_ACT_BASE = [(row, col) for row in range(Q_Y) for col in range(Q_X)]  # Todos los cuadrantes activos
+SEP_CM = 2.5
+SEP_PX_EST = 20
 CM_POR_PX = SEP_CM / SEP_PX_EST
 
-BASELINE_CM = 7.0
+BASELINE_CM = 12.0 # Según manual estereocámara ZED X son 12 cm 
 FOCAL_PIX = 800.0
 MIN_DEPTH_CM = 20.0
 MAX_DEPTH_CM = 300.0
@@ -38,7 +39,7 @@ C_MAP_TXT = (255, 255, 255)
 C_MAP_ACT = (0, 0, 255)
 C_VEC_PUNTO = (0, 255, 255)
 
-FIXED_GRID_SIZE_CM = 20.0
+FIXED_GRID_SIZE_CM = 40.0
 RECT_SZ_CM_FALLBACK = 30.0
 RECT_MARGIN_CM = 5.0
 
