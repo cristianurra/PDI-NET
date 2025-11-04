@@ -120,3 +120,21 @@ Define el flujo de ejecución por *frame* del programa.
 2. **Cálculo de Odometría:** Usa el vector de movimiento de la cámara estimado y lo traduce a centímetros usando `CM_POR_PX` para actualizar la posición global $(\text{pos\_m\_x}, \text{pos\_m\_y})$.
 3. **Actualización del Mapa:** La posición global se usa para determinar la celda $(\text{grid\_x}, \text{grid\_y})$ y se actualiza el diccionario `hist_celdas_vis` con la vista actual.
 4. **Visualización:** Llama a todas las funciones de `drawing.py` para construir y mostrar la interfaz.
+
+## 7. `corrección` (Video de Entrada Recodificado)
+
+Se reencodificó el video de entrada a H.264 para mejorar compatibilidad y reproducción en distintos reproductores/servicios. El nombre del fichero usado en el flujo pasó de `stereonr.mp4` a `stereo_h264.mp4`.
+
+Comando genérico (reemplace rutas y nombres de archivo según corresponda):
+
+```
+ffmpeg -y -i <archivo_entrada.mp4> -c:v libx264 -pix_fmt yuv420p -movflags +faststart <archivo_salida_h264.mp4>
+```
+
+Ejemplo aplicado al proyecto:
+
+```
+ffmpeg -y -i stereonr.mp4 -c:v libx264 -pix_fmt yuv420p -movflags +faststart stereo_h264.mp4
+```
+
+Esta conversión mantiene la calidad razonable y asegura compatibilidad con players web y contenedores que requieren `yuv420p` y `faststart`.
