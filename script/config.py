@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-NOM_VID = 'stereonr_h264.mp4'
+NOM_VID = r'2025_09_11_12_47_39.svo'
 RAD_PUN = 6
 UMB_DIST = 75
 N_VEL_PR = 5
@@ -43,8 +43,33 @@ FIXED_GRID_SIZE_CM = 40.0
 RECT_SZ_CM_FALLBACK = 30.0
 RECT_MARGIN_CM = 5.0
 
+# Parámetros para eliminar frames borrosos al inicio
+VAR_LAPLACIAN_THRESH = 100.0  # umbral de varianza del Laplaciano para considerar un frame nítido
+MAX_INITIAL_SKIP_FRAMES = 60  # máximo de frames iniciales a saltar si son borrosos
+
 ORB_DETECTOR = cv2.ORB_create(nfeatures=500, scaleFactor=1.2, nlevels=8)
 FLANN_MATCHER = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
 K_UNI = np.ones((5, 5), np.uint8)
 K_LIMP = np.ones((3, 3), np.uint8)
+
+# Parámetros para marcar bordes (visualización)
+EDGE_CANNY_LOW = 50
+EDGE_CANNY_HIGH = 150
+EDGE_MAX_POINTS = 600
+EDGE_POINT_RADIUS = 2
+
+# Parámetros para detectar puntos naranjas de referencia en la malla (HSV)
+ORANGE_HSV_LOW = (5, 120, 150)   # H,S,V
+ORANGE_HSV_HIGH = (22, 255, 255)
+
+# Parámetros para detectar zonas muy blancas (concentración de blanco) en ojo izquierdo
+WHITE_INTENSITY_THRESH = 200
+WHITE_MORPH_K = 5
+
+# Parámetros adicionales para detección robusta de marcadores naranjas
+ORANGE_MIN_AREA = 30       # px
+ORANGE_MAX_AREA = 5000     # px
+ORANGE_CIRCULARITY = 0.4   # 0..1, 1 = perfect circle
+EXPORT_ORANGE_CSV = False  # si True exporta las detecciones a CSV
+ORANGE_CSV_PATH = r"orange_detections.csv"

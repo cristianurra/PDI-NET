@@ -2,6 +2,7 @@ import math
 import numpy as np
 import cv2
 from config import MIN_DEPTH_CM, MAX_DEPTH_CM, MAP_ESC_V, MAP_PAD_PX # ¡CORREGIDO!
+from config import ORANGE_HSV_LOW, ORANGE_HSV_HIGH, ORANGE_MIN_AREA, ORANGE_MAX_AREA, ORANGE_CIRCULARITY
 
 def dist(p1, p2):
     return math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
@@ -63,3 +64,53 @@ def register_image_to_map(current_image, existing_image):
 
     except Exception:
         return existing_image
+
+
+def detect_orange_markers(bgr_image):
+    """Detecta marcadores naranjas en la imagen BGR.
+
+    Retorna una lista de diccionarios: [{'cx':int,'cy':int,'area':float,'circ':float,'bbox':(x,y,w,h)}]
+    Las coordenadas son relativas a la entrada (0..w-1, 0..h-1).
+    """
+    if bgr_image is None:
+        return []
+
+    hsv = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2HSV)
+    lower = np.array(ORANGE_HSV_LOW, dtype=np.uint8)
+    upper = np.array(ORANGE_HSV_HIGH, dtype=np.uint8)
+
+    mask = cv2.inRange(hsv, lower, upper)
+
+    # Morfología para quitar ruido
+    kernel = np.ones((3, 3), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    results = []
+    for c in contours:
+        area = cv2.contourArea(c)
+        if area < ORANGE_MIN_AREA or area > ORANGE_MAX_AREA:
+            continue
+
+        perimeter = cv2.arcLength(c, True)
+        if perimeter <= 0:
+            continue
+        circ = 4.0 * math.pi * area / (perimeter * perimeter)
+
+        if circ < ORANGE_CIRCULARITY:
+            # no es suficientemente circular
+            continue
+
+        M = cv2.moments(c)
+        if M['m00'] == 0:
+            continue
+        cX = int(M['m10'] / M['m00'])
+        cY = int(M['m01'] / M['m00'])
+
+        x, y, w_box, h_box = cv2.boundingRect(c)
+
+        results.append({'cx': cX, 'cy': cY, 'area': area, 'circ': circ, 'bbox': (x, y, w_box, h_box)})
+
+    return results

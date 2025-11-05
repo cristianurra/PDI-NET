@@ -1,0 +1,51 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# VS Code
+.vscode/
+
+# JetBrains
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Test / cache
+.pytest_cache/
+.mypy_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Media / data - do not commit large video files or SVOs
+videos_malla_piscina/
+*.svo
+*.mp4
+*.avi
+
+# Logs and databases
+*.log
+*.sqlite3
+
+# Environment files
+.env
+*.env
+
+# Others
+*.tar.gz
