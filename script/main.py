@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 from config import (
     NOM_VID, UMB_DIST, N_VEL_PR, Q_X, Q_Y, K_UNI, K_LIMP,
+    MESH_CONSOLIDATE_K, K_VERT_FILL, Y_MASK_OFFSET,
     FOCAL_PIX, BASELINE_CM, CM_POR_PX, FIXED_GRID_SIZE_CM, RECT_SZ_CM_FALLBACK,
     VAR_LAPLACIAN_THRESH, MAX_INITIAL_SKIP_FRAMES,
     EDGE_CANNY_LOW, EDGE_CANNY_HIGH, EDGE_MAX_POINTS, EDGE_POINT_RADIUS,
@@ -11,7 +12,7 @@ from config import (
     EXPORT_ORANGE_CSV, ORANGE_CSV_PATH
 )
 from tracker import Tracker
-from stereo_processing import proc_seg, get_cns
+from stereo_processing import proc_seg, get_cns, proc_mesh_mask, get_mesh_boundary_y_pos, get_mesh_boundary
 from drawing import dib_escala_profundidad, dib_mov, dib_ayu, dib_map, show_compuesta
 from utils import normalize_cell_view, register_image_to_map, detect_orange_markers
 
@@ -92,10 +93,33 @@ def main():
     while ret:
 
         cns_filt = proc_seg(frame, K_UNI, K_LIMP)
+
+        # -------------------------------------------------------------
+        # Detección del Borde (solo para posición Y de enmascaramiento)
+        # -------------------------------------------------------------
+        # 1. Generar máscara consolidada usando el canal de saturación
+        mesh_mask = proc_mesh_mask(frame, MESH_CONSOLIDATE_K, K_LIMP, K_VERT_FILL)
+
+        # 2. Encontrar la coordenada Y más alta del borde
+        y_borde_detectado = get_mesh_boundary_y_pos(mesh_mask, w // 2, h, K_LIMP)
+
+        # 3. Definir el límite máximo de Y para el tracking (aplicando offset)
+        # Si la detección del borde falla (devuelve 0), usamos el FALLBACK seguro y_max_track = 0
+        # (acepta todos los puntos). Si se detecta el borde, aplicamos el offset para definir
+        # el inicio del tracking más abajo.
+        if y_borde_detectado > 0 and y_borde_detectado < h:
+            # Si el borde fue detectado (y_borde_detectado > 0), el tracking empieza un poco más abajo (offset).
+            y_max_track = y_borde_detectado + Y_MASK_OFFSET
+        else:
+            # FALLBACK SEGURO: Si la detección falla, el límite superior de tracking es Y=0
+            # (es decir, acepta todos los puntos, ya que cY > 0 es casi siempre True).
+            y_max_track = 0
+
         frame_top = frame.copy()
 
+        # OJO: Se pasa el nuevo límite 'y_max_track' a get_cns
         cns_L_matched_only, matched_cns_pairs, cns_disp_only = get_cns(
-            cns_filt, q_w, q_h, w
+            cns_filt, q_w, q_h, w, y_max_track=y_max_track
         )
 
         objs = tracker.update_and_get(matched_cns_pairs)
@@ -111,19 +135,56 @@ def main():
         del_p_x, del_p_y, vista_actual_limpia = dib_mov(frame_top, objs, w, h, depth_cm)
         dib_escala_profundidad(frame_top, w, h)
 
-        # Detectar solo puntos naranjas en ambos ojos y marcarlos (no borrar nada)
-        try:
-            for eye_i, x_start in enumerate([0, w // 2]):
-                x_end = x_start + (w // 2)
-                eye = frame[:, x_start:x_end]
-                markers = detect_orange_markers(eye)
-                for m in markers:
-                    gx = x_start + m['cx']
-                    gy = m['cy']
-                    cv2.circle(frame_top, (gx, gy), EDGE_POINT_RADIUS + 4, (0, 140, 255), -1)
-                    cv2.putText(frame_top, 'REF', (gx + 5, gy - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,140,255), 2)
+        # -------------------------------------------------------------
+        # 1. Consolidación de la Malla (Apertura + Cierre Vertical)
+        # -------------------------------------------------------------
+        # Usamos MESH_CONSOLIDATE_K y K_VERT_FILL para fusionar las líneas de la malla en una región sólida.
+        mesh_mask = proc_mesh_mask(frame, MESH_CONSOLIDATE_K, K_LIMP, K_VERT_FILL)
 
-                    # no CSV export (disabled)
+        # 2. Detección de Borde de Malla Superior (Borde Morfológico: A - A $\ominus$ B)
+        # K_LIMP es el kernel de 3x3 para obtener el borde fino del objeto consolidado.
+        mesh_boundary_contour = get_mesh_boundary(
+            mesh_mask, w // 2, h, K_LIMP
+        )
+
+        # Dibujar el contorno del borde de la malla (solo en el ojo izquierdo)
+        if mesh_boundary_contour is not None:
+            C_MESH_EDGE = (255, 255, 0) # Color Cian
+            cv2.drawContours(frame_top, [mesh_boundary_contour], -1, C_MESH_EDGE, 2)
+            cv2.putText(frame_top, 'BORDE MALLA', (10, h // 2 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, C_MESH_EDGE, 2)
+
+        # Dibujado del límite de tracking y del borde detectado para diagnóstico
+        # y_max_track > 0 significa que la detección fue exitosa y aplicamos el offset.
+        if y_max_track > 0:
+            C_MASK_LINE = (0, 0, 255) # Límite de Tracking (Rojo)
+            C_DETECTION = (0, 255, 255) # Borde Detectado Puro (Amarillo)
+
+            # Línea ROJA (LÍMITE FINAL DE TRACKING)
+            cv2.line(frame_top, (0, y_max_track), (w, y_max_track), C_MASK_LINE, 2)
+            cv2.putText(frame_top, 'LIMITE TRACKING', (10, max(10, y_max_track - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, C_MASK_LINE, 2)
+
+            # LÍNEA AMARILLA (BORDE PURO MEDIANO DETECTADO, sin offset)
+            if y_borde_detectado > 0:
+                cv2.line(frame_top, (0, y_borde_detectado), (w, y_borde_detectado), C_DETECTION, 1)
+                cv2.putText(frame_top, 'BORDE DETECTADO', (10, max(10, y_borde_detectado - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, C_DETECTION, 1)
+
+
+        # --- Detección y Dibujo de Lazos Naranjas (Marcadores de Referencia) ---
+        try:
+            # Iterar sobre el ojo izquierdo (0) y el ojo derecho (w//2)
+            for x_start in [0, w // 2]:
+                x_end = x_start + (w // 2)
+                eye = frame[:, x_start:x_end].copy() 
+                markers = detect_orange_markers(eye)
+                
+                for m in markers:
+                    gx = x_start + m['cx'] 
+                    gy = m['cy'] 
+                    
+                    C_NARANJA_DRAW = (0, 140, 255) # Naranja oscuro
+                    cv2.circle(frame_top, (gx, gy), EDGE_POINT_RADIUS + 4, C_NARANJA_DRAW, -1)
+                    cv2.putText(frame_top, 'REF', (gx + 5, gy - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, C_NARANJA_DRAW, 2)
+
         except Exception:
             pass
 
