@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-NOM_VID = r'2025_09_11_12_47_39.svo'
+NOM_VID = r'C:\Users\ivan_\OneDrive\Escritorio\USM\2025-2\PDI Real\Proyecto\Primer push mio\PDI-NET\videos_malla_piscina\2025_09_11\2025_09_11_12_47_39.svo'
 RAD_PUN = 6
 UMB_DIST = 75
 N_VEL_PR = 5
@@ -52,6 +52,12 @@ FLANN_MATCHER = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
 K_UNI = np.ones((5, 5), np.uint8)
 K_LIMP = np.ones((3, 3), np.uint8)
+# Tamaño del kernel para consolidar la malla mediante apertura morfológica (erosión+dilatación)
+MESH_CONSOLIDATE_K = 7
+# Kernel vertical para rellenar discontinuidades horizontales (reflejos/huecos)
+K_VERT_FILL = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 31))
+# Offset (px) para definir el límite de tracking por debajo del borde detectado
+Y_MASK_OFFSET = 100
 
 # Parámetros para marcar bordes (visualización)
 EDGE_CANNY_LOW = 50
