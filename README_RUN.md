@@ -5,11 +5,14 @@ Problema común:
   ERROR: No se pudo abrir el video 'stereonr_h264.mp4'.
 
 Causas y soluciones:
-1) El archivo configurado en `script/config.py` (variable `NOM_VID`) no existe o no es legible por OpenCV.
-   - Edita `script\config.py` y cambia `NOM_VID` por la ruta absoluta a un MP4 válido, por ejemplo:
-     NOM_VID = r"C:\Users\ivan_\Videos\mi_stereo.mp4"
+1) El archivo configurado en `script/config.py` (variable `NOM_VID`) no existe o no es legible por OpenCV
+   - Opcion 1: Pasarle el archivo por comando. De la forma: 
+      ``python .\script\main.py --video "C:\ruta\a\tu_video.mp4"``
+   - Opción 2: Editar `script\config.py` y cambia `NOM_VID` por la ruta absoluta a un MP4 válido, por ejemplo:
+     NOM_VID = r"C:\ruta\a\tu_video.mp4"
 
-2) Tienes un archivo `.svo` (ZED) — OpenCV no lo abre directamente.
+
+1) Tienes un archivo `.svo` (ZED) — OpenCV no lo abre directamente.
    Opciones:
    - Opción A (recomendada, gráfica): Abre el archivo `.svo` con ZED Explorer (parte del ZED SDK) y exporta a MP4 (File -> Export).
    - Opción B (programática): instala el ZED SDK y las bindings Python (pyzed), luego exporta a MP4 con un script. Ejemplo (requiere ZED SDK instalado):
@@ -31,7 +34,7 @@ Causas y soluciones:
          # Alternativamente, usa ZED Explorer para exportar fácilmente.
          cam.close()
 
-3) OpenCV no tiene soporte para el códec del MP4 en tu instalación.
+2) OpenCV no tiene soporte para el códec del MP4 en tu instalación.
    - Instala una build de OpenCV que incluya FFmpeg (por ejemplo `pip install opencv-python` suele funcionar) o reinstala OpenCV con soporte.
 
 Prueba rápida (en PowerShell) para comprobar si OpenCV puede abrir un video:

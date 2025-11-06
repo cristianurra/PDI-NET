@@ -1,5 +1,6 @@
 import os
 import platform
+import argparse #Para analizar argumentos de línea de comandos
 import cv2
 import numpy as np
 from config import (
@@ -21,26 +22,30 @@ if platform.system() == 'Linux':
     os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
 def main():
-
+    ap = argparse.ArgumentParser(description="Proyecto de Procesamiento de Imágenes Estéreo")
+    ap.add_argument("-v", "--video", type=str, default=NOM_VID,
+                    help="Ruta al archivo de video de entrada (por defecto: valor de NOM_VID en config.py)")
+    args = ap.parse_args()
+    
     rect_sz_cm_actual = RECT_SZ_CM_FALLBACK
 
-    cap = cv2.VideoCapture(NOM_VID)
+    cap = cv2.VideoCapture(args.video)
 
     if not cap.isOpened():
         try:
             cap.release()
         except Exception:
             pass
-        cap = cv2.VideoCapture(NOM_VID, cv2.CAP_FFMPEG)
+        cap = cv2.VideoCapture(args.video, cv2.CAP_FFMPEG)
 
     if not cap.isOpened():
-        ext = os.path.splitext(NOM_VID)[1].lower()
+        ext = os.path.splitext(args.video)[1].lower()
         if ext == '.svo':
-            print(f"ERROR: No se pudo abrir el archivo SVO '{NOM_VID}'. OpenCV no soporta archivos .svo directamente.")
+            print(f"ERROR: No se pudo abrir el archivo SVO '{args.video}'. OpenCV no soporta archivos .svo directamente.")
             print('  - Opción rápida: abre el .svo con ZED Explorer y exporta a MP4 (File -> Export)')
             print('  - Opción programática: usa ZED SDK / pyzed para leer el SVO y guardarlo como MP4 o secuencia de frames.')
         else:
-            print(f"ERROR: No se pudo abrir el video '{NOM_VID}'. Asegúrate que la ruta es correcta y que OpenCV soporta el códec.")
+            print(f"ERROR: No se pudo abrir el video '{args.video}'. Asegúrate que la ruta es correcta y que OpenCV soporta el códec.")
 
         print("Sugerencia: coloca un MP4 accesible y actualiza `NOM_VID` en `script\\config.py` con la ruta absoluta, por ejemplo:\n  NOM_VID = r\"C:\\ruta\\a\\mi_video.mp4\"\n")
         return
