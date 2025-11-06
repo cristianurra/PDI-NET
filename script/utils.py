@@ -5,9 +5,30 @@ from config import MIN_DEPTH_CM, MAX_DEPTH_CM, MAP_ESC_V, MAP_PAD_PX # ¡CORREGI
 from config import ORANGE_HSV_LOW, ORANGE_HSV_HIGH, ORANGE_MIN_AREA, ORANGE_MAX_AREA, ORANGE_CIRCULARITY
 
 def dist(p1, p2):
+    """
+    Calcula la distancia euclidiana entre dos puntos 2D.
+    
+    Args:
+        p1 (tuple): Primera coordenada (x, y).
+        p2 (tuple): Segunda coordenada (x, y).
+    
+    Returns:
+        float: Distancia euclidiana entre p1 y p2.
+    """
     return math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
 
 def depth_to_color(depth_cm):
+    """
+    Convierte un valor de profundidad en centímetros a un color RGB.
+    
+    Mapea profundidades cercanas a rojo y profundidades lejanas a azul de forma lineal.
+    
+    Args:
+        depth_cm (float): Profundidad en centímetros.
+    
+    Returns:
+        tuple: Color BGR (B, G, R) donde cercano=rojo (0, 0, 255) y lejano=azul (255, 0, 0).
+    """
     if depth_cm <= 0 or depth_cm >= MAX_DEPTH_CM:
         return (255, 0, 0)
 
@@ -24,6 +45,20 @@ def depth_to_color(depth_cm):
     return (B, G, R)
 
 def map_trans(hist_m, m_w, m_h):
+    """
+    Calcula la transformación (escala y offsets) para renderizar el mapa de posiciones visitadas.
+    
+    Args:
+        hist_m (list): Lista de coordenadas (x, y) visitadas en centímetros.
+        m_w (int): Ancho del canvas del mapa en píxeles.
+        m_h (int): Alto del canvas del mapa en píxeles.
+    
+    Returns:
+        tuple: (esc_m, off_x, off_y)
+            - esc_m (float): Escala en píxeles por centímetro para el mapa.
+            - off_x (float): Offset en X para centrar el mapa.
+            - off_y (float): Offset en Y para centrar el mapa.
+    """
     if not hist_m:
         return MAP_ESC_V, m_w / 2, m_h / 2
 
@@ -48,6 +83,16 @@ def map_trans(hist_m, m_w, m_h):
     return esc_m, off_x, off_y
 
 def normalize_cell_view(current_image, cell_target_size=(100, 100)):
+    """
+    Normaliza (redimensiona) una imagen a un tamaño objetivo para almacenamiento en el mapa.
+    
+    Args:
+        current_image (numpy.ndarray): Imagen a normalizar.
+        cell_target_size (tuple, optional): Tamaño objetivo (ancho, alto) en píxeles. Default: (100, 100).
+    
+    Returns:
+        numpy.ndarray: Imagen redimensionada o imagen original si falla el redimensionamiento.
+    """
     try:
         normalized_image = cv2.resize(current_image, cell_target_size, interpolation=cv2.INTER_AREA)
         return normalized_image
@@ -55,6 +100,16 @@ def normalize_cell_view(current_image, cell_target_size=(100, 100)):
         return current_image
 
 def register_image_to_map(current_image, existing_image):
+    """
+    Fusiona una imagen actual con una imagen existente del mapa mediante promedio ponderado.
+    
+    Args:
+        current_image (numpy.ndarray): Imagen actual a fusionar.
+        existing_image (numpy.ndarray): Imagen existente en el mapa.
+    
+    Returns:
+        numpy.ndarray: Imagen fusionada (promedio 50-50) o imagen existente si la fusión falla.
+    """
     if existing_image is None or current_image is None or existing_image.shape != current_image.shape:
         return current_image
 
@@ -67,10 +122,19 @@ def register_image_to_map(current_image, existing_image):
 
 
 def detect_orange_markers(bgr_image):
-    """Detecta marcadores naranjas en la imagen BGR.
-
-    Retorna una lista de diccionarios: [{'cx':int,'cy':int,'area':float,'circ':float,'bbox':(x,y,w,h)}]
-    Las coordenadas son relativas a la entrada (0..w-1, 0..h-1).
+    """
+    Detecta marcadores naranjas (lazos de referencia) en una imagen BGR.
+    
+    Utiliza segmentación por color en espacio HSV y filtros de área y circularidad
+    para identificar objetos naranjas circulares.
+    
+    Args:
+        bgr_image (numpy.ndarray): Imagen en formato BGR.
+    
+    Returns:
+        list: Lista de diccionarios con información de cada marcador detectado:
+              [{'cx': int, 'cy': int, 'area': float, 'circ': float, 'bbox': (x, y, w, h)}]
+              Las coordenadas son relativas a la imagen de entrada.
     """
     if bgr_image is None:
         return []

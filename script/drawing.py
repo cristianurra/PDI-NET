@@ -8,6 +8,17 @@ from config import ( # ¡CORREGIDO!
 from utils import map_trans, depth_to_color # ¡CORREGIDO!
 
 def dib_escala_profundidad(frame, w, h):
+    """
+    Dibuja una barra vertical de escala de profundidad en el frame.
+    
+    Args:
+        frame (numpy.ndarray): Frame de video en formato BGR donde se dibujará la escala.
+        w (int): Ancho del frame.
+        h (int): Alto del frame.
+    
+    Returns:
+        None: Modifica el frame directamente.
+    """
     BAR_W, BAR_H = 50, 300
     BAR_X = w - BAR_W - 20
     BAR_Y = max(10, h // 2 - BAR_H // 2)
@@ -56,6 +67,22 @@ def dib_escala_profundidad(frame, w, h):
 
 
 def dib_mov(frame, objs, w, h, depth_cm):
+    """
+    Dibuja objetos rastreados, vectores de movimiento y texto informativo en el frame.
+    
+    Args:
+        frame (numpy.ndarray): Frame de video en formato BGR donde se dibujarán los elementos.
+        objs (list): Lista de objetos rastreados (diccionarios con datos de tracking).
+        w (int): Ancho del frame estéreo completo.
+        h (int): Alto del frame.
+        depth_cm (float): Profundidad estimada en centímetros.
+    
+    Returns:
+        tuple: (del_p_x, del_p_y, vista_actual_limpia)
+            - del_p_x (int): Desplazamiento horizontal de la cámara (negativo del movimiento detectado).
+            - del_p_y (int): Desplazamiento vertical de la cámara (negativo del movimiento detectado).
+            - vista_actual_limpia (numpy.ndarray): Imagen del ojo izquierdo sin anotaciones.
+    """
 
     vels_t = []
 
@@ -109,6 +136,19 @@ def dib_mov(frame, objs, w, h, depth_cm):
 
 
 def dib_ayu(frame, w, h, q_w, q_h):
+    """
+    Dibuja elementos de ayuda visual: separador de ojos, etiquetas y cuadrícula de celdas.
+    
+    Args:
+        frame (numpy.ndarray): Frame de video en formato BGR donde se dibujarán los elementos de ayuda.
+        w (int): Ancho del frame estéreo completo.
+        h (int): Alto del frame.
+        q_w (int): Ancho de cada celda de la cuadrícula.
+        q_h (int): Alto de cada celda de la cuadrícula.
+    
+    Returns:
+        None: Modifica el frame directamente.
+    """
     m_x = w // 2
     cv2.line(frame, (m_x, 0), (m_x, h), C_NARAN, 2)
     cv2.putText(frame, 'OJO IZQ', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, C_NARAN, 2)
@@ -128,6 +168,23 @@ def dib_ayu(frame, w, h, q_w, q_h):
 
 
 def dib_map(hist_celdas_vis, pos_m_x, pos_m_y, fixed_grid_sz_cm, rect_sz_cm_actual, map_w_display, map_h_display, current_view_w_cm, current_view_h_cm):
+    """
+    Dibuja un mapa 2D de las zonas visitadas con imágenes de cada celda recorrida.
+    
+    Args:
+        hist_celdas_vis (dict): Diccionario con celdas visitadas {(grid_x, grid_y): (depth_cm, imagen)}.
+        pos_m_x (float): Posición actual en X en centímetros.
+        pos_m_y (float): Posición actual en Y en centímetros.
+        fixed_grid_sz_cm (float): Tamaño de la cuadrícula en centímetros.
+        rect_sz_cm_actual (float): Tamaño del rectángulo actual en centímetros.
+        map_w_display (int): Ancho del área de visualización del mapa.
+        map_h_display (int): Alto del área de visualización del mapa.
+        current_view_w_cm (float): Ancho de la vista actual en centímetros.
+        current_view_h_cm (float): Alto de la vista actual en centímetros.
+    
+    Returns:
+        numpy.ndarray: Imagen del mapa renderizado con dimensiones (map_h_display, map_w_display).
+    """
 
     celdas_xy_cm = list(hist_celdas_vis.keys())
 
@@ -211,6 +268,19 @@ def dib_map(hist_celdas_vis, pos_m_x, pos_m_y, fixed_grid_sz_cm, rect_sz_cm_actu
     return cv2.resize(canv_m, (map_w_display, map_h_display))
 
 def show_compuesta(f_top, f_bottom_left_eye, canv_m, w_orig, h_orig):
+    """
+    Muestra una vista compuesta del procesamiento estéreo (frame superior + máscara inferior + mapa).
+    
+    Args:
+        f_top (numpy.ndarray): Frame superior con anotaciones (imagen estéreo completa).
+        f_bottom_left_eye (numpy.ndarray): Máscara del ojo izquierdo (escala de grises).
+        canv_m (numpy.ndarray): Canvas del mapa de zonas visitadas.
+        w_orig (int): Ancho original del frame estéreo.
+        h_orig (int): Alto original del frame.
+    
+    Returns:
+        bool: True si el usuario presiona 'q' o cierra la ventana, False en caso contrario.
+    """
 
     f_bottom_left_eye_bgr = cv2.cvtColor(f_bottom_left_eye, cv2.COLOR_GRAY2BGR)
 

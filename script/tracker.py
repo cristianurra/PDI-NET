@@ -4,17 +4,55 @@ from utils import dist, depth_to_color  # ¡CORREGIDO!
 from config import N_DEPTH_PR, BASELINE_CM, FOCAL_PIX, FRAMES_MAX_ESTATICO # ¡CORREGIDO!
 
 class Tracker:
+    """
+    Clase para rastrear objetos detectados en frames de video estéreo.
+    Asocia detecciones entre frames consecutivos y mantiene historial de posición, velocidad y profundidad.
+    """
+    
     def __init__(self, max_d, len_v):
+        """
+        Inicializa el tracker de objetos.
+        
+        Args:
+            max_d (float): Distancia máxima en píxeles para asociar una detección nueva con un objeto existente.
+            len_v (int): Longitud del historial de velocidades a mantener para cada objeto.
+        """
         self.objs = []
         self.prox_id = 0
         self.max_d = max_d
         self.len_v = len_v
 
     def update_config(self, max_d, len_v):
+        """
+        Actualiza la configuración del tracker.
+        
+        Args:
+            max_d (float): Nueva distancia máxima de asociación.
+            len_v (int): Nueva longitud del historial de velocidades.
+        """
         self.max_d = max_d
         self.len_v = len_v
 
     def update_and_get(self, matched_cns_pairs):
+        """
+        Actualiza el estado de los objetos rastreados con nuevas detecciones.
+        
+        Args:
+            matched_cns_pairs (list): Lista de tuplas con pares de centroides emparejados entre ojo izquierdo y derecho.
+                                      Cada elemento es ((cx_L, cy_L), (cx_R, cy_R)).
+        
+        Returns:
+            list: Lista de diccionarios con información de cada objeto rastreado. Cada diccionario contiene:
+                  - 'id': Identificador único del objeto
+                  - 'pos': Posición actual (x, y) en el ojo izquierdo
+                  - 'pos_R': Posición actual (x, y) en el ojo derecho
+                  - 'hist_vel': Historial de velocidades [(vx, vy), ...]
+                  - 'supervivencia_fr': Contador de frames de supervivencia
+                  - 'color': Color RGB para visualización basado en profundidad
+                  - 'depth_cm': Profundidad estimada en centímetros
+                  - 'hist_depth': Historial de profundidades
+                  - 'hist_pos': Historial de posiciones
+        """
 
         max_d_act = self.max_d
         n_vel_pr_act = self.len_v

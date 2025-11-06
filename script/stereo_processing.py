@@ -3,6 +3,17 @@ import numpy as np
 from config import Q_ACT_BASE, Y_TOLERANCE, MIN_DISPARITY, MAX_DISPARITY 
 
 def proc_seg(frame, k_uni, k_limp):
+    """
+    Procesa un frame de video para segmentar objetos.
+    
+    Args: 
+        frame (numpy.ndarray): Frame de video en formato BGR.
+        k_uni (numpy.ndarray): Kernel para la operación de cierre morfológico.
+        k_limp (numpy.ndarray): Kernel para la operación de apertura morfológica.
+    
+    Returns:
+        numpy.ndarray: Máscara binaria segmentada.
+    """
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (3, 3), 0)
 
@@ -17,6 +28,23 @@ def proc_seg(frame, k_uni, k_limp):
 
 
 def get_cns(cns_filt, q_w, q_h, w, y_max_track=9999):
+    """
+    Extrae y empareja centroides de objetos detectados en una imagen estéreo.
+    
+    Args:
+        cns_filt (numpy.ndarray): Máscara binaria segmentada de toda la imagen estéreo (izquierda y derecha).
+        q_w (int): Ancho de cada celda de la cuadrícula.
+        q_h (int): Alto de cada celda de la cuadrícula.
+        w (int): Ancho total de la imagen estéreo (ambos ojos).
+        y_max_track (int, optional): Coordenada Y máxima para filtrar detecciones. 
+                                      Solo se aceptan puntos con cY > y_max_track. Default: 9999.
+    
+    Returns:
+        tuple: (cns_L_matched_only, matched_cns_pairs, cns_disp_only)
+            - cns_L_matched_only (list): Lista de centroides del ojo izquierdo que fueron emparejados [(x, y), ...].
+            - matched_cns_pairs (list): Lista de tuplas ((centroide_L, centroide_R), disparidad).
+            - cns_disp_only (list): Lista de tuplas (centroide_L, disparidad) para centroides emparejados.
+    """
 
     Q_ACT_DRAW = Q_ACT_BASE
     m_x = w // 2
@@ -89,10 +117,17 @@ def get_cns(cns_filt, q_w, q_h, w, y_max_track=9999):
 
 
 def get_consolidated_mesh_mask(binary_mask, consolidate_k_size=5, k_vert_fill=None):
-    """Aplica Apertura y Cierre vertical para consolidar las líneas de la malla en regiones sólidas.
-
-    - Apertura (erosión seguida de dilatación) con kernel cuadrado.
-    - Cierre vertical para rellenar bandas/huecos (estruct. rectangular alto).
+    """
+    Aplica Apertura y Cierre vertical para consolidar las líneas de la malla en regiones sólidas.
+    
+    Args:
+        binary_mask (numpy.ndarray): Máscara binaria de entrada.
+        consolidate_k_size (int, optional): Tamaño del kernel cuadrado para apertura. Default: 5.
+        k_vert_fill (numpy.ndarray, optional): Kernel rectangular vertical para cierre. 
+                                                Si es None, se crea uno de 3x31. Default: None.
+    
+    Returns:
+        numpy.ndarray: Máscara consolidada con operaciones morfológicas aplicadas, o None si la entrada es None.
     """
     if binary_mask is None:
         return None
@@ -114,12 +149,20 @@ def get_consolidated_mesh_mask(binary_mask, consolidate_k_size=5, k_vert_fill=No
 
 
 def proc_mesh_mask(frame, mesh_consolidate_k, k_limp, k_vert_fill):
-    """Genera una máscara binaria optimizada para consolidar la región de la malla enrollada (usando HLS).
-
-    Estrategia:
-    - Convertimos a HLS y analizamos el canal de luminosidad (L) para detectar reflejos.
-    - Además conservamos una ruta por Saturación (S) para obtener la malla como máscara base.
-    - Aplicamos Apertura + Cierre vertical para consolidar líneas en regiones sólidas.
+    """
+    Genera una máscara binaria optimizada para consolidar la región de la malla enrollada.
+    
+    Utiliza el canal de saturación (HSV) para detectar la malla y aplica operaciones morfológicas
+    (Apertura + Cierre vertical) para consolidar líneas en regiones sólidas.
+    
+    Args:
+        frame (numpy.ndarray): Frame de video en formato BGR.
+        mesh_consolidate_k (int): Tamaño del kernel cuadrado para operaciones de apertura.
+        k_limp (numpy.ndarray): Kernel pequeño para limpieza final.
+        k_vert_fill (numpy.ndarray): Kernel rectangular vertical para cierre vertical.
+    
+    Returns:
+        numpy.ndarray: Máscara binaria consolidada de la malla, o None si frame es None.
     """
     if frame is None:
         return None
@@ -169,9 +212,18 @@ def proc_mesh_mask(frame, mesh_consolidate_k, k_limp, k_vert_fill):
 
 
 def get_mesh_boundary(consolidated_mask, w_half, h_total, kernel_edge):
-    """Calcula el borde (contorno exterior) de la zona consolidada (malla) en el ojo izquierdo.
-
-    Ahora se espera que la máscara sea la región sólida de la malla.
+    """
+    Calcula el borde (contorno exterior) de la zona consolidada de la malla en el ojo izquierdo.
+    
+    Args:
+        consolidated_mask (numpy.ndarray): Máscara consolidada de la región de la malla.
+        w_half (int): Ancho medio de la imagen (para separar ojo izquierdo del derecho).
+        h_total (int): Altura total de la imagen.
+        kernel_edge (numpy.ndarray): Kernel para erosión (obtención del borde fino).
+    
+    Returns:
+        numpy.ndarray: Contorno más grande del borde de la malla en la mitad superior, 
+                       o None si no se encuentra ningún contorno válido.
     """
     if consolidated_mask is None:
         return None
@@ -215,10 +267,21 @@ def get_mesh_boundary(consolidated_mask, w_half, h_total, kernel_edge):
 
 
 def get_mesh_boundary_y_pos(consolidated_mask, w_half, h_total, kernel_edge):
-    """Calcula el borde (contorno exterior) y devuelve la coordenada Y promedio donde se encuentra el punto más alto del objeto consolidado.
-
-    Usa un método de votación (mediana) sobre los puntos más altos de los contornos válidos
+    """
+    Calcula la coordenada Y promedio del borde superior de la malla consolidada.
+    
+    Utiliza un método de votación (mediana) sobre los puntos más altos de los contornos válidos
     para obtener una estimación robusta del borde superior.
+    
+    Args:
+        consolidated_mask (numpy.ndarray): Máscara consolidada de la región de la malla.
+        w_half (int): Ancho medio de la imagen (para separar ojo izquierdo del derecho).
+        h_total (int): Altura total de la imagen.
+        kernel_edge (numpy.ndarray): Kernel para erosión (obtención del borde fino).
+    
+    Returns:
+        int: Coordenada Y de la posición del borde superior de la malla (mediana de los puntos más altos).
+             Retorna 0 si no se detecta ningún borde válido (modo fallback).
     """
     if consolidated_mask is None:
         return 0
