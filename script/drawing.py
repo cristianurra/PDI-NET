@@ -228,4 +228,4 @@ def show_compuesta(f_top, f_bottom_left_eye, canv_m, w_orig, h_orig):
     full_display = cv2.vconcat([f_top, bottom_half_display])
 
     cv2.imshow('Interfaz Estéreo Unificada', full_display)
-    return cv2.waitKey(1) & 0xFF == ord('q')
+    return cv2.waitKey(1) & 0xFF == ord('q') or cv2.getWindowProperty('Interfaz Estéreo Unificada', cv2.WND_PROP_VISIBLE) < 1

@@ -3,6 +3,7 @@ import platform
 import argparse #Para analizar argumentos de línea de comandos
 import cv2
 import numpy as np
+from tqdm import tqdm
 from config import (
     NOM_VID, UMB_DIST, N_VEL_PR, Q_X, Q_Y, K_UNI, K_LIMP,
     MESH_CONSOLIDATE_K, K_VERT_FILL, Y_MASK_OFFSET,
@@ -21,6 +22,8 @@ if platform.system() == 'Linux':
     # Sólo forzamos el backend Qt 'xcb' en Linux; en Windows no es necesario
     os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
+
+
 def main():
     ap = argparse.ArgumentParser(description="Proyecto de Procesamiento de Imágenes Estéreo")
     ap.add_argument("-v", "--video", type=str, default=NOM_VID,
@@ -33,7 +36,7 @@ def main():
 
     if not cap.isOpened():
         try:
-            cap.release()
+            cap.release() #
         except Exception:
             pass
         cap = cv2.VideoCapture(args.video, cv2.CAP_FFMPEG)
@@ -50,16 +53,21 @@ def main():
         print("Sugerencia: coloca un MP4 accesible y actualiza `NOM_VID` en `script\\config.py` con la ruta absoluta, por ejemplo:\n  NOM_VID = r\"C:\\ruta\\a\\mi_video.mp4\"\n")
         return
 
+    # Obtener dimensiones del video
     w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    # Calcular dimensiones de la cuadrícula
     q_w, q_h = w // Q_X, h // Q_Y
 
+    # Inicializar el tracker
     tracker = Tracker(UMB_DIST, N_VEL_PR)
 
     pos_m_x, pos_m_y = 0.0, 0.0
 
     hist_celdas_vis = {}
 
-    cv2.namedWindow('Interfaz Estéreo Unificada', cv2.WINDOW_NORMAL)
+    cv2.namedWindow('Interfaz Estéreo Unificada', cv2.WINDOW_NORMAL) # el nombre debe soportar tildes
+    cv2.resizeWindow('Interfaz Estéreo Unificada', 1280, 720)
 
     # Pre-scan: saltar frames iniciales muy borrosos usando la varianza del Laplaciano
     skipped_initial = 0
@@ -94,6 +102,7 @@ def main():
 
     # CSV export disabled by default; not creating any CSV unless explicitly enabled in config
 
+    pbar = tqdm(total=total_frames, desc="Procesando frames", unit="frame") # Inicia la barra de progreso
     # main loop
     while ret:
 
@@ -249,11 +258,15 @@ def main():
         prev_frame = frame_idx
         ret, frame = cap.read()
         frame_idx += 1
+        pbar.update(1) # Actualiza la barra de progreso
 
         # safety: if frame index didn't advance or read failed repeatedly, break
         if not ret and frame_idx - prev_frame <= 1:
             break
-
+    
+    
+    # Cierre Programa 
+    pbar.close()
     cap.release()
     # no CSV to close (export disabled)
     cv2.destroyAllWindows()
