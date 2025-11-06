@@ -23,39 +23,131 @@ if platform.system() == 'Linux':
     os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
 
+def open_svo_file(svo_path, start_frame=0):
+    """
+    Abre un archivo .svo usando pyzed y retorna un generador de frames.
+    
+    Args:
+        svo_path (str): Ruta al archivo .svo.
+        start_frame (int): Frame desde donde iniciar la lectura.
+    
+    Returns:
+        tuple: (generator, total_frames, width, height) o (None, 0, 0, 0) si falla.
+    """
+    try:
+        import pyzed.sl as sl  # type: ignore
+    except ImportError:
+        print("ERROR: pyzed no está instalado. Para procesar archivos .svo, instala el ZED SDK y pyzed.")
+        print("  Instalación: pip install pyzed")
+        return None, 0, 0, 0
+    
+    zed = sl.Camera()
+    init_params = sl.InitParameters()
+    init_params.set_from_svo_file(svo_path)
+    init_params.svo_real_time_mode = False
+    
+    status = zed.open(init_params)
+    if status != sl.ERROR_CODE.SUCCESS:
+        print(f"ERROR: No se pudo abrir el archivo SVO '{svo_path}': {status}")
+        return None, 0, 0, 0
+    
+    # Obtener información del video (API 3.8)
+    total_frames = zed.get_svo_number_of_frames()
+    cam_info = zed.get_camera_information()
+    w = cam_info.camera_resolution.width * 2  # Ancho total (izquierda + derecha)
+    h = cam_info.camera_resolution.height
+    
+    # Posicionar en el frame inicial
+    if start_frame > 0:
+        if start_frame >= total_frames:
+            print(f"ADVERTENCIA: Frame inicial {start_frame} excede el total de frames {total_frames}. Iniciando desde el frame 0.")
+            start_frame = 0
+        else:
+            zed.set_svo_position(start_frame)
+            print(f"Iniciando desde el frame {start_frame}/{total_frames}")
+    
+    print(f"Archivo SVO abierto: {total_frames} frames, resolución: {w}x{h}")
+    
+    def frame_generator():
+        """Generador que extrae frames del archivo SVO."""
+        left_image = sl.Mat()
+        right_image = sl.Mat()
+        
+        while True:
+            if zed.grab() == sl.ERROR_CODE.SUCCESS:
+                # Extraer imágenes izquierda y derecha
+                zed.retrieve_image(left_image, sl.VIEW.LEFT)
+                zed.retrieve_image(right_image, sl.VIEW.RIGHT)
+                
+                # Convertir a numpy arrays
+                left_bgr = left_image.get_data()[:, :, :3]  # BGRA -> BGR
+                right_bgr = right_image.get_data()[:, :, :3]
+                
+                # Concatenar horizontalmente (izquierda | derecha)
+                stereo_frame = np.hstack((left_bgr, right_bgr))
+                
+                yield True, stereo_frame
+            else:
+                yield False, None
+                zed.close()
+                break
+    
+    return frame_generator(), total_frames, w, h
+
 
 def main():
     ap = argparse.ArgumentParser(description="Proyecto de Procesamiento de Imágenes Estéreo")
     ap.add_argument("-v", "--video", type=str, default=NOM_VID,
                     help="Ruta al archivo de video de entrada (por defecto: valor de NOM_VID en config.py)")
+    ap.add_argument("-sf", "--start-frame", type=int, default=0,
+                    help="Frame inicial desde donde comenzar el procesamiento (por defecto: 0)")
     args = ap.parse_args()
     
     rect_sz_cm_actual = RECT_SZ_CM_FALLBACK
+    
+    # Detectar tipo de archivo
+    ext = os.path.splitext(args.video)[1].lower()
+    is_svo = ext == '.svo'
+    
+    # Variables comunes
+    cap = None
+    frame_generator = None
+    w, h, total_frames = 0, 0, 0
+    start_frame = args.start_frame
+    
+    if is_svo:
+        # Procesar archivo .svo
+        frame_generator, total_frames, w, h = open_svo_file(args.video, start_frame)
+        if frame_generator is None:
+            return
+    else:
+        # Procesar video estándar (MP4, AVI, etc.)
+        cap = cv2.VideoCapture(args.video)
 
-    cap = cv2.VideoCapture(args.video)
+        if not cap.isOpened():
+            try:
+                cap.release()
+            except Exception:
+                pass
+            cap = cv2.VideoCapture(args.video, cv2.CAP_FFMPEG)
 
-    if not cap.isOpened():
-        try:
-            cap.release() #
-        except Exception:
-            pass
-        cap = cv2.VideoCapture(args.video, cv2.CAP_FFMPEG)
-
-    if not cap.isOpened():
-        ext = os.path.splitext(args.video)[1].lower()
-        if ext == '.svo':
-            print(f"ERROR: No se pudo abrir el archivo SVO '{args.video}'. OpenCV no soporta archivos .svo directamente.")
-            print('  - Opción rápida: abre el .svo con ZED Explorer y exporta a MP4 (File -> Export)')
-            print('  - Opción programática: usa ZED SDK / pyzed para leer el SVO y guardarlo como MP4 o secuencia de frames.')
-        else:
+        if not cap.isOpened():
             print(f"ERROR: No se pudo abrir el video '{args.video}'. Asegúrate que la ruta es correcta y que OpenCV soporta el códec.")
+            print("Sugerencia: coloca un MP4 accesible y actualiza `NOM_VID` en `script\\config.py` con la ruta absoluta, por ejemplo:\n  NOM_VID = r\"C:\\ruta\\a\\mi_video.mp4\"\n")
+            return
 
-        print("Sugerencia: coloca un MP4 accesible y actualiza `NOM_VID` en `script\\config.py` con la ruta absoluta, por ejemplo:\n  NOM_VID = r\"C:\\ruta\\a\\mi_video.mp4\"\n")
-        return
-
-    # Obtener dimensiones del video
-    w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        # Obtener dimensiones del video
+        w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        
+        # Posicionar en el frame inicial para MP4
+        if start_frame > 0:
+            if start_frame >= total_frames:
+                print(f"ADVERTENCIA: Frame inicial {start_frame} excede el total de frames {total_frames}. Iniciando desde el frame 0.")
+                start_frame = 0
+            else:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+                print(f"Iniciando desde el frame {start_frame}/{total_frames}")
     # Calcular dimensiones de la cuadrícula
     q_w, q_h = w // Q_X, h // Q_Y
 
@@ -72,37 +164,71 @@ def main():
     # Pre-scan: saltar frames iniciales muy borrosos usando la varianza del Laplaciano
     skipped_initial = 0
     first_good_frame = None
-    for i in range(int(MAX_INITIAL_SKIP_FRAMES)):
-        ok, ftmp = cap.read()
-        if not ok:
-            break
-        try:
-            gray_tmp = cv2.cvtColor(ftmp, cv2.COLOR_BGR2GRAY)
-            lap_var = cv2.Laplacian(gray_tmp, cv2.CV_64F).var()
-        except Exception:
-            lap_var = 0.0
+    
+    # No me funciona bien el laplaciano, por lo que lo comento por mientras, luego lo mejoramos
+    # De momento puse la opcion de empezar de fotogramas especificos
+    # if is_svo:
+    #     # Para SVO, leer directamente desde el generador
+    #     for i in range(int(MAX_INITIAL_SKIP_FRAMES)):
+    #         ok, ftmp = next(frame_generator)
+    #         if not ok:
+    #             break
+    #         try:
+    #             gray_tmp = cv2.cvtColor(ftmp, cv2.COLOR_BGR2GRAY)
+    #             lap_var = cv2.Laplacian(gray_tmp, cv2.CV_64F).var()
+    #         except Exception:
+    #             lap_var = 0.0
 
-        if lap_var >= VAR_LAPLACIAN_THRESH:
-            first_good_frame = ftmp
-            break
-        skipped_initial += 1
+    #         if lap_var >= VAR_LAPLACIAN_THRESH:
+    #             first_good_frame = ftmp
+    #             break
+    #         skipped_initial += 1
+    # else:
+    #     # Para MP4, usar VideoCapture
+    #     for i in range(int(MAX_INITIAL_SKIP_FRAMES)):
+    #         ok, ftmp = cap.read()
+    #         if not ok:
+    #             break
+    #         try:
+    #             gray_tmp = cv2.cvtColor(ftmp, cv2.COLOR_BGR2GRAY)
+    #             lap_var = cv2.Laplacian(gray_tmp, cv2.CV_64F).var()
+    #         except Exception:
+    #             lap_var = 0.0
 
-    if first_good_frame is not None:
-        print(f"Se saltaron {skipped_initial} frames iniciales borrosos (lap_var={lap_var:.1f}); comenzando desde un frame nítido.")
-        frame = first_good_frame
-        ret = True
-        frame_idx = skipped_initial
+    #         if lap_var >= VAR_LAPLACIAN_THRESH:
+    #             first_good_frame = ftmp
+    #             break
+    #         skipped_initial += 1
+
+    # if first_good_frame is not None:
+    #     print(f"Se saltaron {skipped_initial} frames iniciales borrosos (lap_var={lap_var:.1f}); comenzando desde un frame nítido.")
+    #     frame = first_good_frame
+    #     ret = True
+    #     frame_idx = skipped_initial
+    # else:
+    #     # No se encontró frame suficientemente nítido: volver al inicio y usar el primer frame disponible
+    #     if is_svo:
+    #         # Para SVO, necesitamos recrear el generador (no se puede rebobinar)
+    #         frame_generator, _, _, _ = open_svo_file(args.video)
+    #         ret, frame = next(frame_generator)
+    #     else:
+    #         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    #         ret, frame = cap.read()
+    #     if ret:
+    #         print("No se detectó frame suficientemente nítido al inicio; usando primer frame disponible.")
+    #     frame_idx = 0
+    
+    # Leer el primer frame desde la posición inicial
+    if is_svo:
+        ret, frame = next(frame_generator)
     else:
-        # No se encontró frame suficientemente nítido: volver al inicio y usar el primer frame disponible
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         ret, frame = cap.read()
-        if ret:
-            print("No se detectó frame suficientemente nítido al inicio; usando primer frame disponible.")
-        frame_idx = 0
+    frame_idx = start_frame
 
     # CSV export disabled by default; not creating any CSV unless explicitly enabled in config
 
-    pbar = tqdm(total=total_frames, desc="Procesando frames", unit="frame") # Inicia la barra de progreso
+    # Configurar barra de progreso: inicia desde start_frame y va hasta total_frames
+    pbar = tqdm(total=total_frames, initial=start_frame, desc="Procesando frames", unit="frame")
     # main loop
     while ret:
 
@@ -256,7 +382,10 @@ def main():
 
         # avanzar al siguiente frame
         prev_frame = frame_idx
-        ret, frame = cap.read()
+        if is_svo:
+            ret, frame = next(frame_generator)
+        else:
+            ret, frame = cap.read()
         frame_idx += 1
         pbar.update(1) # Actualiza la barra de progreso
 
@@ -267,7 +396,8 @@ def main():
     
     # Cierre Programa 
     pbar.close()
-    cap.release()
+    if cap is not None:
+        cap.release()
     # no CSV to close (export disabled)
     cv2.destroyAllWindows()
 
