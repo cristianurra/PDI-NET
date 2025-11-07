@@ -1,24 +1,13 @@
 import cv2
 import numpy as np
 import random
-from config import ( # ¡CORREGIDO!
+from config import (
     MIN_DEPTH_CM, MAX_DEPTH_CM, C_MAP_FND, C_MAP_TXT, C_MAP_ACT, C_NARAN, C_GRIS, C_ACT, C_CAM,
     RAD_PUN, ESC_VEC, RECT_MARGIN_CM, MIN_SUPERVIVENCIA_FR, PORC_MOS, Q_X, Q_Y, Q_ACT_BASE
 )
-from utils import map_trans, depth_to_color # ¡CORREGIDO!
+from utils import map_trans, depth_to_color
 
 def dib_escala_profundidad(frame, w, h):
-    """
-    Dibuja una barra vertical de escala de profundidad en el frame.
-    
-    Args:
-        frame (numpy.ndarray): Frame de video en formato BGR donde se dibujará la escala.
-        w (int): Ancho del frame.
-        h (int): Alto del frame.
-    
-    Returns:
-        None: Modifica el frame directamente.
-    """
     BAR_W, BAR_H = 50, 300
     BAR_X = w - BAR_W - 20
     BAR_Y = max(10, h // 2 - BAR_H // 2)
@@ -63,27 +52,10 @@ def dib_escala_profundidad(frame, w, h):
     cv2.putText(frame, label_lejos, (text_x, min(h - 5, y_label_lejos)), font, font_scale, text_color, font_thickness)
 
     cv2.line(frame, (max(0, BAR_X - 5), BAR_Y), (BAR_X, BAR_Y), text_color, 2)
-    cv2.line(frame, (max(0, BAR_X - 5), BAR_Y + BAR_H), (BAR_X, BAR_Y + BAR_H), text_color, 2)
+    cv2.line(frame, (max(0, BAR_X - 5), BAR_Y + BAR_H), (BAR_X, BAR_H), text_color, 2)
 
 
 def dib_mov(frame, objs, w, h, depth_cm):
-    """
-    Dibuja objetos rastreados, vectores de movimiento y texto informativo en el frame.
-    
-    Args:
-        frame (numpy.ndarray): Frame de video en formato BGR donde se dibujarán los elementos.
-        objs (list): Lista de objetos rastreados (diccionarios con datos de tracking).
-        w (int): Ancho del frame estéreo completo.
-        h (int): Alto del frame.
-        depth_cm (float): Profundidad estimada en centímetros.
-    
-    Returns:
-        tuple: (del_p_x, del_p_y, vista_actual_limpia)
-            - del_p_x (int): Desplazamiento horizontal de la cámara (negativo del movimiento detectado).
-            - del_p_y (int): Desplazamiento vertical de la cámara (negativo del movimiento detectado).
-            - vista_actual_limpia (numpy.ndarray): Imagen del ojo izquierdo sin anotaciones.
-    """
-
     vels_t = []
 
     objs_estables = [obj for obj in objs if obj['supervivencia_fr'] >= MIN_SUPERVIVENCIA_FR]
@@ -108,47 +80,66 @@ def dib_mov(frame, objs, w, h, depth_cm):
 
     def dib_vec(vels, c_x, c_y, color, lbl=""):
         if vels:
-            m_vx, m_vy = int(np.median([v[0] for v in vels])), int(np.median([v[1] for v in vels]))
-            p2_x = c_x - m_vx * ESC_VEC
-            p2_y = c_y - m_vy * ESC_VEC
-            cv2.arrowedLine(frame, (c_x, c_y), (p2_x, p2_y), color, 4, tipLength=0.3)
+            CIRCLE_RADIUS = 120
+            MAX_VECTOR_LENGTH = CIRCLE_RADIUS * 0.8
+
+            cv2.circle(frame, (c_x, c_y), CIRCLE_RADIUS, C_CAM, 6)
+
+            m_vx = np.median([v[0] for v in vels])
+            m_vy = np.median([v[1] for v in vels])
+
+            magnitude = np.sqrt(m_vx**2 + m_vy**2)
+            current_scaled_vx = m_vx * ESC_VEC
+            current_scaled_vy = m_vy * ESC_VEC
+            current_length = magnitude * ESC_VEC
+
+            final_vx = current_scaled_vx
+            final_vy = current_scaled_vy
+
+            if magnitude > 0 and current_length > MAX_VECTOR_LENGTH:
+                scale_factor = MAX_VECTOR_LENGTH / current_length
+                final_vx = current_scaled_vx * scale_factor
+                final_vy = current_scaled_vy * scale_factor
+
+            p2_x = int(c_x - final_vx)
+            p2_y = int(c_y - final_vy)
+
+            cv2.arrowedLine(frame, (c_x, c_y), (p2_x, p2_y), color, 8, tipLength=0.4)
 
             if lbl:
-                cv2.putText(frame, lbl, (c_x - 40, c_y - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                cv2.putText(frame, lbl, (c_x - 60, c_y - CIRCLE_RADIUS - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
 
     v_cam_x, v_cam_y = 0, 0
     if vels_t:
         v_cam_x = int(np.median([v[0] for v in vels_t]))
         v_cam_y = int(np.median([v[1] for v in vels_t]))
-        dib_vec(vels_t, w // 2, h // 4, C_CAM, 'CAMARA')
+        dib_vec(vels_t, w // 2, h // 3, C_CAM, 'CAMARA')
 
-    txt_v_cam = f"MOV. HORIZ. (px): {v_cam_x}"
-    cv2.putText(frame, txt_v_cam, (w // 2 - 150, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.0, C_CAM, 2)
+    FONT_SCALE_INFO = 1.0
+    FONT_THICKNESS_INFO = 2
+
+    txt_v_cam_h = f"MOV. HORIZ. (px): {v_cam_x}"
+    cv2.putText(frame, txt_v_cam_h, (w // 2 - 150, 60), cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE_INFO, C_CAM, FONT_THICKNESS_INFO)
+
+    txt_v_cam_v = f"MOV. VERT. (px): {v_cam_y}"
+    cv2.putText(frame, txt_v_cam_v, (w // 2 - 150, 95), cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE_INFO, C_CAM, FONT_THICKNESS_INFO)
+
 
     if depth_cm > 0 and depth_cm < MAX_DEPTH_CM * 2:
         txt_depth = f"PROFUNDIDAD (cm): {depth_cm:.2f}"
     else:
         txt_depth = "PROFUNDIDAD: N/A o > 600 cm"
 
-    cv2.putText(frame, txt_depth, (w // 2 - 150, 110), cv2.FONT_HERSHEY_SIMPLEX, 1.0, C_CAM, 2)
+    FONT_SCALE_DEPTH = 1.5
+    TEXT_COLOR_DEPTH = (0, 0, 0)
+    FONT_THICKNESS_DEPTH = 3
+
+    cv2.putText(frame, txt_depth, (w // 2 - 150, 130), cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE_DEPTH, TEXT_COLOR_DEPTH, FONT_THICKNESS_DEPTH)
 
     return -v_cam_x, -v_cam_y, clean_area_image
 
 
 def dib_ayu(frame, w, h, q_w, q_h):
-    """
-    Dibuja elementos de ayuda visual: separador de ojos, etiquetas y cuadrícula de celdas.
-    
-    Args:
-        frame (numpy.ndarray): Frame de video en formato BGR donde se dibujarán los elementos de ayuda.
-        w (int): Ancho del frame estéreo completo.
-        h (int): Alto del frame.
-        q_w (int): Ancho de cada celda de la cuadrícula.
-        q_h (int): Alto de cada celda de la cuadrícula.
-    
-    Returns:
-        None: Modifica el frame directamente.
-    """
     m_x = w // 2
     cv2.line(frame, (m_x, 0), (m_x, h), C_NARAN, 2)
     cv2.putText(frame, 'OJO IZQ', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, C_NARAN, 2)
@@ -168,24 +159,6 @@ def dib_ayu(frame, w, h, q_w, q_h):
 
 
 def dib_map(hist_celdas_vis, pos_m_x, pos_m_y, fixed_grid_sz_cm, rect_sz_cm_actual, map_w_display, map_h_display, current_view_w_cm, current_view_h_cm):
-    """
-    Dibuja un mapa 2D de las zonas visitadas con imágenes de cada celda recorrida.
-    
-    Args:
-        hist_celdas_vis (dict): Diccionario con celdas visitadas {(grid_x, grid_y): (depth_cm, imagen)}.
-        pos_m_x (float): Posición actual en X en centímetros.
-        pos_m_y (float): Posición actual en Y en centímetros.
-        fixed_grid_sz_cm (float): Tamaño de la cuadrícula en centímetros.
-        rect_sz_cm_actual (float): Tamaño del rectángulo actual en centímetros.
-        map_w_display (int): Ancho del área de visualización del mapa.
-        map_h_display (int): Alto del área de visualización del mapa.
-        current_view_w_cm (float): Ancho de la vista actual en centímetros.
-        current_view_h_cm (float): Alto de la vista actual en centímetros.
-    
-    Returns:
-        numpy.ndarray: Imagen del mapa renderizado con dimensiones (map_h_display, map_w_display).
-    """
-
     celdas_xy_cm = list(hist_celdas_vis.keys())
 
     if not celdas_xy_cm:
@@ -194,7 +167,7 @@ def dib_map(hist_celdas_vis, pos_m_x, pos_m_y, fixed_grid_sz_cm, rect_sz_cm_actu
     celdas_xy_cm.append((pos_m_x, pos_m_y))
 
     sz = max(map_w_display, map_h_display)
-    canv_m = np.full((sz, sz, 3), C_MAP_FND, dtype=np.uint8)
+    canv_m = np.zeros((sz, sz, 3), dtype=np.uint8)
 
     esc_m, off_x, off_y = map_trans(celdas_xy_cm, sz, sz)
 
@@ -260,7 +233,6 @@ def dib_map(hist_celdas_vis, pos_m_x, pos_m_y, fixed_grid_sz_cm, rect_sz_cm_actu
     txt_pos = f"X: {pos_m_x:.2f} cm, Y: {pos_m_y:.2f} cm"
     txt_esc = f"Escala: 1:{1.0/esc_m:.2f} px/cm"
 
-    # Textos del mapa con tamaño grande
     cv2.putText(canv_m, "MAPA DE ZONAS VISITADAS (CM) - IMAGEN POR VISTA", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, C_MAP_TXT, 3)
     cv2.putText(canv_m, txt_pos, (10, sz - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, C_MAP_TXT, 2)
     cv2.putText(canv_m, txt_esc, (sz - 360, sz - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, C_MAP_TXT, 2)
@@ -268,20 +240,6 @@ def dib_map(hist_celdas_vis, pos_m_x, pos_m_y, fixed_grid_sz_cm, rect_sz_cm_actu
     return cv2.resize(canv_m, (map_w_display, map_h_display))
 
 def show_compuesta(f_top, f_bottom_left_eye, canv_m, w_orig, h_orig):
-    """
-    Muestra una vista compuesta del procesamiento estéreo (frame superior + máscara inferior + mapa).
-    
-    Args:
-        f_top (numpy.ndarray): Frame superior con anotaciones (imagen estéreo completa).
-        f_bottom_left_eye (numpy.ndarray): Máscara del ojo izquierdo (escala de grises).
-        canv_m (numpy.ndarray): Canvas del mapa de zonas visitadas.
-        w_orig (int): Ancho original del frame estéreo.
-        h_orig (int): Alto original del frame.
-    
-    Returns:
-        bool: True si el usuario presiona 'q' o cierra la ventana, False en caso contrario.
-    """
-
     f_bottom_left_eye_bgr = cv2.cvtColor(f_bottom_left_eye, cv2.COLOR_GRAY2BGR)
 
     left_eye_w = f_bottom_left_eye_bgr.shape[1]
@@ -297,5 +255,8 @@ def show_compuesta(f_top, f_bottom_left_eye, canv_m, w_orig, h_orig):
 
     full_display = cv2.vconcat([f_top, bottom_half_display])
 
-    cv2.imshow('Interfaz Estéreo Unificada', full_display)
+    new_h, new_w = full_display.shape[:2]
+    full_display_doubled = cv2.resize(full_display, (new_w * 2, new_h * 2), interpolation=cv2.INTER_LINEAR)
+
+    cv2.imshow('Interfaz Estéreo Unificada', full_display_doubled)
     return cv2.waitKey(1) & 0xFF == ord('q') or cv2.getWindowProperty('Interfaz Estéreo Unificada', cv2.WND_PROP_VISIBLE) < 1
