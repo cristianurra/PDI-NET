@@ -26,7 +26,7 @@ MIN_DISPARITY = 5 # Disparidad mínima
 MAX_DISPARITY = 150 # Disparidad máxima
 Y_TOLERANCE = 3 # Tolerancia en píxeles para correspondencia en Y
 
-ESC_VEC = 5 # Escala para dibujar vectores de velocidad
+ESC_VEC = 20 # Escala para dibujar vectores de velocidad
 MAP_CAN_SZ = 800 # Tamaño del canvas del mapa
 MAP_PAD_PX = 40 # Padding en píxeles del mapa
 MAP_ESC_V = 5.0 # Escala de los vectores en el mapa
