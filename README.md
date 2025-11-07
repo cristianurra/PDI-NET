@@ -14,7 +14,7 @@ python main.py -v "C:<ruta_al_video>" -sf 500
 ```
 ## Ejecución en Linux 
 ```bash
-urra@linux:~$  python3 main.py -v "ruta" -sf 500 #iniciar en frame 500
+urra@linux:~$  python3 main.py -v "ruta_video.mp4" -sf 500 #iniciar en frame 500
 ```
 
 
