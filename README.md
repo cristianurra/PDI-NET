@@ -8,9 +8,13 @@
 ![Interfaz](https://github.com/cristianurra/PDI-NET/blob/main/imagenes/captura.png)
 
 
-## Ejecución del Programa
+## Ejecución en windows
 ```bash
 python main.py -v "C:<ruta_al_video>" -sf 500
+```
+## Ejecución en Linux 
+```bash
+urra@linux:~$  python3 main.py -v "ruta" -sf 500 #iniciar en frame 500
 ```
 
 
