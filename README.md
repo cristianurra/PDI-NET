@@ -1,8 +1,22 @@
-# Cronología de Ejecución del Programa
+# PDI-NET - Procesamiento de Imágenes Estéreo
+
+## 🎥 Demo
+
+[![Video Demo](https://img.youtube.com/vi/X3mn275QVqc/maxresdefault.jpg)](https://youtu.be/X3mn275QVqc)
+
+---
+
+## Ejecución del Programa
+```bash
+python main.py -v "C:<ruta_al_video>" -sf 500
+```
+
+
+## Cronología de Ejecución del Programa
 
 ***
 
-## I. Inicialización (Paso Único)
+### I. Inicialización (Paso Único)
 
 El programa se prepara para comenzar el procesamiento.
 
@@ -14,7 +28,7 @@ El programa se prepara para comenzar el procesamiento.
 
 ***
 
-## II. Bucle Principal por Frame (Ciclo Iterativo)
+### II. Bucle Principal por Frame (Ciclo Iterativo)
 
 Este ciclo se repite para cada imagen del video (`while ret`):
 
@@ -34,20 +48,20 @@ Este ciclo se repite para cada imagen del video (`while ret`):
 ![Imagen binaria](https://github.com/cristianurra/PDI-NET/blob/main/imagenes/threshold.png)
 ![Imagen Stereo](https://github.com/cristianurra/PDI-NET/blob/main/imagenes/stereo.png)
 
-## III. Cierre (Fin de Ejecución)
+### III. Cierre (Fin de Ejecución)
 
 El programa termina cuando el usuario presiona la tecla **'q'** o se acaba el video. Se liberan los recursos (`cap.release()`) y se cierran las ventanas (`cv2.destroyAllWindows()`).
 
 
 
 
-# Documentación del Código de Visión Estéreo y Mapeo 2D
+## Documentación del Código de Visión Estéreo y Mapeo 2D
 
 Este proyecto implementa un sistema de visión por computadora que combina el **seguimiento de objetos**, el **cálculo de profundidad estéreo** y la **generación de un mapa 2D simple** a partir de un video que contiene imágenes estéreo (lado a lado).
 
 ***
 
-## 1. `config.py` (Configuraciones y Constantes)
+### 1. `config.py` (Configuraciones y Constantes)
 
 Este archivo contiene todos los parámetros numéricos y de configuración. 
 
@@ -62,7 +76,7 @@ Este archivo contiene todos los parámetros numéricos y de configuración.
 
 ***
 
-## 2. `utils.py` (Funciones de necesarias)
+### 2. `utils.py` (Funciones de necesarias)
 
 Contiene funciones matemáticas y de ayuda usadas por los módulos de rastreo y dibujo.
 
@@ -76,7 +90,7 @@ Contiene funciones matemáticas y de ayuda usadas por los módulos de rastreo y 
 
 ***
 
-## 3. `stereo_processing.py` (Procesamiento Estéreo)
+### 3. `stereo_processing.py` (Procesamiento Estéreo)
 
 Maneja la segmentación inicial de la imagen y la lógica fundamental de emparejamiento.
 
@@ -87,7 +101,7 @@ Maneja la segmentación inicial de la imagen y la lógica fundamental de emparej
 
 ***
 
-## 4. `tracker.py` (Seguimiento de puntos)
+### 4. `tracker.py` (Seguimiento de puntos)
 
 Contiene la clase `Tracker`, que gestiona la persistencia de los objetos, su movimiento y sus propiedades.
 
@@ -98,7 +112,7 @@ Contiene la clase `Tracker`, que gestiona la persistencia de los objetos, su mov
 
 ***
 
-## 5. `drawing.py` (Visualización)
+### 5. `drawing.py` (Visualización)
 
 Agrupa todas las funciones responsables de dibujar la información y la interfaz de usuario.
 
@@ -112,7 +126,7 @@ Agrupa todas las funciones responsables de dibujar la información y la interfaz
 
 ***
 
-## 6. `main.py` (Bucle Principal)
+### 6. `main.py` (Bucle Principal)
 
 Define el flujo de ejecución por *frame* del programa.
 
@@ -121,7 +135,7 @@ Define el flujo de ejecución por *frame* del programa.
 3. **Actualización del Mapa:** La posición global se usa para determinar la celda $(\text{grid\_x}, \text{grid\_y})$ y se actualiza el diccionario `hist_celdas_vis` con la vista actual.
 4. **Visualización:** Llama a todas las funciones de `drawing.py` para construir y mostrar la interfaz.
 
-## 7. `corrección` (Video de Entrada Recodificado)
+### 7. `corrección` (Video de Entrada Recodificado)
 
 Se reencodificó el video de entrada a H.264 para mejorar compatibilidad y reproducción en distintos reproductores/servicios. El nombre del fichero usado en el flujo pasó de `stereonr.mp4` a `stereo_h264.mp4`.
 
