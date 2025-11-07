@@ -16,7 +16,8 @@ python main.py -v "C:<ruta_al_video>" -sf 500
 ```bash
 urra@linux:~$  python3 main.py -v "ruta_video.mp4" -sf 500 #iniciar en frame 500
 ```
-
+## Videos de prueba
+Github no permite subir videos (debido al tamaño de los archivos). Los videos stereo se encuentran en el siguiente [Enlace videos](https://drive.google.com/drive/folders/13DaTxRA60Ea-0Uf0BaMgEVquyJqHoPbr?usp=sharing)
 
 ## Cronología de Ejecución del Programa
 
