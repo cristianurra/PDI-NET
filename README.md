@@ -5,7 +5,7 @@
 [![Video Demo](https://img.youtube.com/vi/X3mn275QVqc/maxresdefault.jpg)](https://youtu.be/X3mn275QVqc)
 
 ---
-![Interfaz](https://github.com/cristianurra/PDI-NET/tree/main/imagenes)
+![Interfaz](https://github.com/cristianurra/PDI-NET/blob/main/imagenes/stereo-foto.png)
 
 
 ## Ejecución del Programa
