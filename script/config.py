@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-NOM_VID = 'stereonr.mp4'
+NOM_VID = r'C:\Users\ivan_\OneDrive\Escritorio\USM\2025-2\PDI Real\Proyecto\Primer push mio\PDI-NET\videos_malla_piscina\2025_09_25_12_42_28.mp4'
 RAD_PUN = 6 # Radio de los puntos de interés
 UMB_DIST = 75 # Distancia umbral para la detección de puntos
 N_VEL_PR = 10 # Número de velocidades para el procesamiento

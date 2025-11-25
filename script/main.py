@@ -17,6 +17,7 @@ from tracker import Tracker
 from stereo_processing import proc_seg, get_cns, proc_mesh_mask, get_mesh_boundary_y_pos, get_mesh_boundary
 from drawing import dib_escala_profundidad, dib_mov, dib_ayu, dib_map, show_compuesta
 from utils import normalize_cell_view, register_image_to_map, detect_orange_markers
+from mapper import GlobalMapper2D 
 
 if platform.system() == 'Linux':
     # Sólo forzamos el backend Qt 'xcb' en Linux; en Windows no es necesario
@@ -230,6 +231,13 @@ def main():
     # Configurar barra de progreso: inicia desde start_frame y va hasta total_frames
     pbar = tqdm(total=total_frames, initial=start_frame, desc="Procesando frames", unit="frame")
     # main loop
+
+    tracker = Tracker(max_d=UMB_DIST, len_v=N_VEL_PR)
+    # Inicializar mapper 3D (usa ojo izquierdo -> ancho w//2)
+    mapeo = GlobalMapper2D()
+    cv2.namedWindow("Mapa Global 2D", cv2.WINDOW_NORMAL)
+    
+
     while ret:
 
         cns_filt = proc_seg(frame, K_UNI, K_LIMP)
@@ -263,6 +271,25 @@ def main():
         )
 
         objs = tracker.update_and_get(matched_cns_pairs)
+
+        # Calcular varianza del Laplaciano para medir nitidez
+        gray_tmp = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        lap_var = cv2.Laplacian(gray_tmp, cv2.CV_64F).var()
+
+        # Filtro de Calidad Relajado: Contar objetos con profundidad válida
+        valid_depth_count = sum(1 for o in objs if o.get('depth_cm', 0) > 0)
+        
+        # Aceptamos si hay más de 3 puntos con profundidad válida
+        quality_good = valid_depth_count > 3
+        
+        if quality_good:
+            mapeo.update_position(objs)
+            
+        try:
+            map_img = mapeo.draw_map(objs, is_quality_good=quality_good)
+            cv2.imshow('Mapa Global 2D', map_img)
+        except Exception:
+            pass
 
         depth_cm = 0.0
         if cns_disp_only:
@@ -393,6 +420,10 @@ def main():
         if not ret and frame_idx - prev_frame <= 1:
             break
     
+    # Mapeo 3D
+    # mapeo.update(objs)
+    # map_img = mapeo.draw_map()
+    # cv2.imshow('Mapa 3D Radar', map_img)
     
     # Cierre Programa 
     pbar.close()
