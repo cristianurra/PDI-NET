@@ -1,13 +1,13 @@
 import cv2
 import numpy as np
 import random
-from config import (
-    MIN_DEPTH_CM, MAX_DEPTH_CM, C_MAP_FND, C_MAP_TXT, C_MAP_ACT, C_NARAN, C_GRIS, C_ACT, C_CAM,
-    RAD_PUN, ESC_VEC, RECT_MARGIN_CM, MIN_SUPERVIVENCIA_FR, PORC_MOS, Q_X, Q_Y, Q_ACT_BASE
-)
-from utils import map_trans, depth_to_color
+import math
+from typing import List, Tuple, Dict, Any
 
-def dib_escala_profundidad(frame, w, h):
+from config import ConfiguracionGlobal
+from utils import depth_to_color, map_trans
+
+def dib_escala_profundidad(frame: np.ndarray, w: int, h: int, config: ConfiguracionGlobal):
     BAR_W, BAR_H = 50, 300
     BAR_X = w - BAR_W - 20
     BAR_Y = max(10, h // 2 - BAR_H // 2)
@@ -15,8 +15,8 @@ def dib_escala_profundidad(frame, w, h):
     bar_img = np.zeros((BAR_H, BAR_W, 3), dtype=np.uint8)
     for i in range(BAR_H):
         norm_val = 1.0 - (i / BAR_H)
-        depth_cm = MIN_DEPTH_CM + norm_val * (MAX_DEPTH_CM - MIN_DEPTH_CM)
-        color = depth_to_color(depth_cm)
+        depth_cm = config.MIN_DEPTH_CM + norm_val * (config.MAX_DEPTH_CM - config.MIN_DEPTH_CM)
+        color = depth_to_color(depth_cm, config)
         bar_img[i, :, :] = color
 
     y_end = min(h, BAR_Y + BAR_H)
@@ -24,42 +24,13 @@ def dib_escala_profundidad(frame, w, h):
     if BAR_Y < y_end and BAR_X < x_end:
         frame[BAR_Y:y_end, BAR_X:x_end] = bar_img[0:(y_end - BAR_Y), 0:(x_end - BAR_X)]
 
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.8
-    font_thickness = 2
-    text_color = (255, 255, 255)
 
-    text_cerca = f"{MIN_DEPTH_CM:.0f} cm"
-    text_lejos = f"{MAX_DEPTH_CM:.0f} cm"
-    label_cerca = "CERCA (ROJO)"
-    label_lejos = "LEJOS (AZUL)"
-
-    (tw_c, th_c), _ = cv2.getTextSize(text_cerca, font, font_scale, font_thickness)
-    (tw_l, th_l), _ = cv2.getTextSize(text_lejos, font, font_scale, font_thickness)
-    (tw_lbl_c, th_lbl_c), _ = cv2.getTextSize(label_cerca, font, font_scale, font_thickness)
-    (tw_lbl_l, th_lbl_l), _ = cv2.getTextSize(label_lejos, font, font_scale, font_thickness)
-
-    text_x = max(5, BAR_X - 10 - max(tw_c, tw_l, tw_lbl_c, tw_lbl_l))
-
-    y_cerca = min(h - 5, max(th_c + 5, BAR_Y + 15))
-    y_label_cerca = max(5 + th_lbl_c, BAR_Y - 15)
-    y_lejos = min(h - 5, BAR_Y + BAR_H)
-    y_label_lejos = min(h - 5, BAR_Y + BAR_H + 25)
-
-    cv2.putText(frame, text_cerca, (text_x, y_cerca), font, font_scale, text_color, font_thickness)
-    cv2.putText(frame, label_cerca, (text_x, max(5, y_label_cerca)), font, font_scale, text_color, font_thickness)
-    cv2.putText(frame, text_lejos, (text_x, y_lejos), font, font_scale, text_color, font_thickness)
-    cv2.putText(frame, label_lejos, (text_x, min(h - 5, y_label_lejos)), font, font_scale, text_color, font_thickness)
-
-    cv2.line(frame, (max(0, BAR_X - 5), BAR_Y), (BAR_X, BAR_Y), text_color, 2)
-    cv2.line(frame, (max(0, BAR_X - 5), BAR_Y + BAR_H), (BAR_X, BAR_H), text_color, 2)
-
-
-def dib_mov(frame, objs, w, h, depth_cm):
+def dib_mov(frame: np.ndarray, objs: List[Dict[str, Any]], w: int, h: int, depth_cm: float, config: ConfiguracionGlobal) -> Tuple[float, float, np.ndarray]:
     vels_t = []
 
-    objs_estables = [obj for obj in objs if obj['supervivencia_fr'] >= MIN_SUPERVIVENCIA_FR]
-    num_mos = max(1, int(len(objs_estables) * PORC_MOS)) if objs_estables else 0
+    objs_estables = [obj for obj in objs if obj['supervivencia_fr'] >= config.MIN_SUPERVIVENCIA_FR]
+
+    num_mos = max(1, int(len(objs_estables) * config.PORC_MOS)) if objs_estables else 0
     objs_dib = random.sample(objs_estables, num_mos) if num_mos > 0 else []
 
     clean_area_image = frame[:, :w // 2].copy()
@@ -69,8 +40,8 @@ def dib_mov(frame, objs, w, h, depth_cm):
         cX_R, cY_R = obj['pos_R']
         color_punto = obj['color']
 
-        cv2.circle(frame, (cX, cY), RAD_PUN, color_punto, -1)
-        cv2.circle(frame, (cX_R, cY_R), RAD_PUN, color_punto, -1)
+        cv2.circle(frame, (cX, cY), config.RAD_PUN, color_punto, -1)
+        cv2.circle(frame, (cX_R, cY_R), config.RAD_PUN, color_punto, -1)
 
         v_x = np.median([v[0] for v in obj['hist_vel']])
         v_y = np.median([v[1] for v in obj['hist_vel']])
@@ -78,98 +49,81 @@ def dib_mov(frame, objs, w, h, depth_cm):
         if abs(v_x) > 1 or abs(v_y) > 1:
             vels_t.append((v_x, v_y))
 
-    def dib_vec(vels, c_x, c_y, color, lbl=""):
+    def dib_vec(vels: List[Tuple[float, float]], c_x: int, c_y: int, color: Tuple[int, int, int], lbl: str = ""):
         if vels:
             CIRCLE_RADIUS = 120
             MAX_VECTOR_LENGTH = CIRCLE_RADIUS * 0.8
 
-            cv2.circle(frame, (c_x, c_y), CIRCLE_RADIUS, C_CAM, 6)
+            cv2.circle(frame, (c_x, c_y), CIRCLE_RADIUS, config.C_CAM, 6)
 
             m_vx = np.median([v[0] for v in vels])
             m_vy = np.median([v[1] for v in vels])
 
             magnitude = np.sqrt(m_vx**2 + m_vy**2)
-            current_scaled_vx = m_vx * ESC_VEC
-            current_scaled_vy = m_vy * ESC_VEC
-            current_length = magnitude * ESC_VEC
+            current_scaled_vx = m_vx * config.ESC_VEC
+            current_scaled_vy = m_vy * config.ESC_VEC
+            current_length = magnitude * config.ESC_VEC
 
             final_vx = current_scaled_vx
-            final_vy = current_scaled_vy
+            final_fy = current_scaled_vy
 
             if magnitude > 0 and current_length > MAX_VECTOR_LENGTH:
                 scale_factor = MAX_VECTOR_LENGTH / current_length
                 final_vx = current_scaled_vx * scale_factor
-                final_vy = current_scaled_vy * scale_factor
+                final_fy = current_scaled_vy * scale_factor
 
             p2_x = int(c_x - final_vx)
-            p2_y = int(c_y - final_vy)
+            p2_y = int(c_y - final_fy)
 
             cv2.arrowedLine(frame, (c_x, c_y), (p2_x, p2_y), color, 8, tipLength=0.4)
 
-            if lbl:
-                cv2.putText(frame, lbl, (c_x - 60, c_y - CIRCLE_RADIUS - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
 
-    v_cam_x, v_cam_y = 0, 0
+    v_cam_x, v_cam_y = 0.0, 0.0
     if vels_t:
-        v_cam_x = int(np.median([v[0] for v in vels_t]))
-        v_cam_y = int(np.median([v[1] for v in vels_t]))
-        dib_vec(vels_t, w // 2, h // 3, C_CAM, 'CAMARA')
-
-    FONT_SCALE_INFO = 1.0
-    FONT_THICKNESS_INFO = 2
-
-    txt_v_cam_h = f"MOV. HORIZ. (px): {v_cam_x}"
-    cv2.putText(frame, txt_v_cam_h, (w // 2 - 150, 60), cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE_INFO, C_CAM, FONT_THICKNESS_INFO)
-
-    txt_v_cam_v = f"MOV. VERT. (px): {v_cam_y}"
-    cv2.putText(frame, txt_v_cam_v, (w // 2 - 150, 95), cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE_INFO, C_CAM, FONT_THICKNESS_INFO)
-
-
-    if depth_cm > 0 and depth_cm < MAX_DEPTH_CM * 2:
-        txt_depth = f"PROFUNDIDAD (cm): {depth_cm:.2f}"
-    else:
-        txt_depth = "PROFUNDIDAD: N/A o > 600 cm"
-
-    FONT_SCALE_DEPTH = 1.5
-    TEXT_COLOR_DEPTH = (0, 0, 0)
-    FONT_THICKNESS_DEPTH = 3
-
-    cv2.putText(frame, txt_depth, (w // 2 - 150, 130), cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE_DEPTH, TEXT_COLOR_DEPTH, FONT_THICKNESS_DEPTH)
+        v_cam_x = float(np.median([v[0] for v in vels_t]))
+        v_cam_y = float(np.median([v[1] for v in vels_t]))
+        dib_vec(vels_t, w // 2, h // 3, config.C_CAM, 'CAMARA')
 
     return -v_cam_x, -v_cam_y, clean_area_image
 
 
-def dib_ayu(frame, w, h, q_w, q_h):
+def dib_ayu(frame: np.ndarray, w: int, h: int, q_w: int, q_h: int, config: ConfiguracionGlobal):
     m_x = w // 2
-    cv2.line(frame, (m_x, 0), (m_x, h), C_NARAN, 2)
-    cv2.putText(frame, 'OJO IZQ', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, C_NARAN, 2)
-    cv2.putText(frame, 'OJO DER', (m_x + 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, C_NARAN, 2)
+    cv2.line(frame, (m_x, 0), (m_x, h), config.C_NARAN, 2)
 
-    for col in range(1, Q_X):
-        cv2.line(frame, (col * q_w, 0), (col * q_w, h), C_GRIS, 1)
-    for row in range(1, Q_Y):
-        cv2.line(frame, (0, row * q_h), (w, row * q_h), C_GRIS, 1)
+    for col in range(1, config.Q_X):
+        cv2.line(frame, (col * q_w, 0), (col * q_w, h), config.C_GRIS, 1)
+    for row in range(1, config.Q_Y):
+        cv2.line(frame, (0, row * q_h), (w, row * q_h), config.C_GRIS, 1)
 
-    Q_ACT_DRAW = Q_ACT_BASE
     T_ACT = 3
-    for row, col in Q_ACT_DRAW:
-        x1, y1 = col * q_w, row * q_h
-        x2, y2 = (col + 1) * q_w, (row + 1) * q_h
-        cv2.rectangle(frame, (x1, y1), (x2, y2), C_ACT, T_ACT)
+    for row, col in config.Q_ACT_BASE:
+        x1 = col * q_w
+        y1 = row * q_h
+        x2 = (col + 1) * q_w
+        y2 = (row + 1) * q_h
+        cv2.rectangle(frame, (x1, y1), (x2, y2), config.C_ACT, T_ACT)
 
 
-def dib_map(hist_celdas_vis, pos_m_x, pos_m_y, fixed_grid_sz_cm, rect_sz_cm_actual, map_w_display, map_h_display, current_view_w_cm, current_view_h_cm):
+def dib_map(
+    hist_celdas_vis: Dict[Tuple[int, int], Tuple[float, np.ndarray]],
+    pos_m_x: float, pos_m_y: float,
+    fixed_grid_sz_cm: float, rect_sz_cm_actual: float,
+    map_w_display: int, map_h_display: int,
+    current_view_w_cm: float, current_view_h_cm: float, config: ConfiguracionGlobal
+) -> np.ndarray:
     celdas_xy_cm = list(hist_celdas_vis.keys())
 
-    if not celdas_xy_cm:
-        celdas_xy_cm = [(pos_m_x, pos_m_y)]
+    if not hist_celdas_vis:
+        celdas_xy_cm = [(pos_m_x / fixed_grid_sz_cm, pos_m_y / fixed_grid_sz_cm)]
 
-    celdas_xy_cm.append((pos_m_x, pos_m_y))
+    celdas_xy_cm_normalized = [(x * fixed_grid_sz_cm, y * fixed_grid_sz_cm) for x, y in celdas_xy_cm]
+    celdas_xy_cm_normalized.append((pos_m_x, pos_m_y))
 
     sz = max(map_w_display, map_h_display)
     canv_m = np.zeros((sz, sz, 3), dtype=np.uint8)
 
-    esc_m, off_x, off_y = map_trans(celdas_xy_cm, sz, sz)
+    esc_m, off_x, off_y = map_trans(celdas_xy_cm_normalized, sz, sz, config)
 
     for (grid_x, grid_y), data in hist_celdas_vis.items():
 
@@ -180,7 +134,7 @@ def dib_map(hist_celdas_vis, pos_m_x, pos_m_y, fixed_grid_sz_cm, rect_sz_cm_actu
 
         rect_size_cm = fixed_grid_sz_cm
 
-        rect_size_px = int((rect_size_cm - RECT_MARGIN_CM) * esc_m)
+        rect_size_px = int((rect_size_cm - config.RECT_MARGIN_CM) * esc_m)
 
         map_center_x = int(off_x + cell_center_x * esc_m)
         map_center_y = int(off_y - cell_center_y * esc_m)
@@ -225,38 +179,15 @@ def dib_map(hist_celdas_vis, pos_m_x, pos_m_y, fixed_grid_sz_cm, rect_sz_cm_actu
         x2 = cur_x + half_W_PX
         y2 = cur_y + half_H_PX
 
-        cv2.rectangle(canv_m, (x1, y1), (x2, y2), C_CAM, 2)
-        cv2.circle(canv_m, (cur_x, cur_y), 3, C_MAP_ACT, -1)
+        cv2.rectangle(canv_m, (x1, y1), (x2, y2), config.C_CAM, 2)
+        cv2.circle(canv_m, (cur_x, cur_y), 3, config.C_MAP_ACT, -1)
     else:
-        cv2.circle(canv_m, (cur_x, cur_y), 7, C_MAP_ACT, -1)
+        cv2.circle(canv_m, (cur_x, cur_y), 7, config.C_MAP_ACT, -1)
 
     txt_pos = f"X: {pos_m_x:.2f} cm, Y: {pos_m_y:.2f} cm"
     txt_esc = f"Escala: 1:{1.0/esc_m:.2f} px/cm"
 
-    cv2.putText(canv_m, "MAPA DE ZONAS VISITADAS (CM) - IMAGEN POR VISTA", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, C_MAP_TXT, 3)
-    cv2.putText(canv_m, txt_pos, (10, sz - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, C_MAP_TXT, 2)
-    cv2.putText(canv_m, txt_esc, (sz - 360, sz - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, C_MAP_TXT, 2)
+    cv2.putText(canv_m, txt_pos, (10, sz - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, config.C_MAP_TXT, 2)
+    cv2.putText(canv_m, txt_esc, (sz - 300, sz - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, config.C_MAP_TXT, 2)
 
     return cv2.resize(canv_m, (map_w_display, map_h_display))
-
-def show_compuesta(f_top, f_bottom_left_eye, canv_m, w_orig, h_orig):
-    f_bottom_left_eye_bgr = cv2.cvtColor(f_bottom_left_eye, cv2.COLOR_GRAY2BGR)
-
-    left_eye_w = f_bottom_left_eye_bgr.shape[1]
-    map_display_w = w_orig - left_eye_w
-    map_display_h = h_orig
-
-    bottom_half_display = np.zeros((h_orig, w_orig, 3), dtype=np.uint8)
-
-    bottom_half_display[0:h_orig, 0:left_eye_w] = f_bottom_left_eye_bgr
-
-    map_offset_x = left_eye_w
-    bottom_half_display[0:map_display_h, map_offset_x:map_offset_x + map_display_w] = canv_m
-
-    full_display = cv2.vconcat([f_top, bottom_half_display])
-
-    new_h, new_w = full_display.shape[:2]
-    full_display_doubled = cv2.resize(full_display, (new_w * 2, new_h * 2), interpolation=cv2.INTER_LINEAR)
-
-    cv2.imshow('Interfaz Estéreo Unificada', full_display_doubled)
-    return cv2.waitKey(1) & 0xFF == ord('q') or cv2.getWindowProperty('Interfaz Estéreo Unificada', cv2.WND_PROP_VISIBLE) < 1
