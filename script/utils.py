@@ -1,39 +1,19 @@
 import math
 import numpy as np
 import cv2
-from config import MIN_DEPTH_CM, MAX_DEPTH_CM, MAP_ESC_V, MAP_PAD_PX # ¡CORREGIDO!
-from config import ORANGE_HSV_LOW, ORANGE_HSV_HIGH, ORANGE_MIN_AREA, ORANGE_MAX_AREA, ORANGE_CIRCULARITY
+from typing import Tuple, List, Dict, Any, Optional, Generator
 
-def dist(p1, p2):
-    """
-    Calcula la distancia euclidiana entre dos puntos 2D.
-    
-    Args:
-        p1 (tuple): Primera coordenada (x, y).
-        p2 (tuple): Segunda coordenada (x, y).
-    
-    Returns:
-        float: Distancia euclidiana entre p1 y p2.
-    """
+from config import ConfiguracionGlobal
+
+def dist(p1: Tuple[float, float], p2: Tuple[float, float]) -> float:
     return math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
 
-def depth_to_color(depth_cm):
-    """
-    Convierte un valor de profundidad en centímetros a un color RGB.
-    
-    Mapea profundidades cercanas a rojo y profundidades lejanas a azul de forma lineal.
-    
-    Args:
-        depth_cm (float): Profundidad en centímetros.
-    
-    Returns:
-        tuple: Color BGR (B, G, R) donde cercano=rojo (0, 0, 255) y lejano=azul (255, 0, 0).
-    """
-    if depth_cm <= 0 or depth_cm >= MAX_DEPTH_CM:
+def depth_to_color(depth_cm: float, config: ConfiguracionGlobal) -> Tuple[int, int, int]:
+    if depth_cm <= 0 or depth_cm >= config.MAX_DEPTH_CM:
         return (255, 0, 0)
 
     normalized_depth = np.clip(
-        (depth_cm - MIN_DEPTH_CM) / (MAX_DEPTH_CM - MIN_DEPTH_CM),
+        (depth_cm - config.MIN_DEPTH_CM) / (config.MAX_DEPTH_CM - config.MIN_DEPTH_CM),
         0.0,
         1.0
     )
@@ -44,72 +24,14 @@ def depth_to_color(depth_cm):
 
     return (B, G, R)
 
-def map_trans(hist_m, m_w, m_h):
-    """
-    Calcula la transformación (escala y offsets) para renderizar el mapa de posiciones visitadas.
-    
-    Args:
-        hist_m (list): Lista de coordenadas (x, y) visitadas en centímetros.
-        m_w (int): Ancho del canvas del mapa en píxeles.
-        m_h (int): Alto del canvas del mapa en píxeles.
-    
-    Returns:
-        tuple: (esc_m, off_x, off_y)
-            - esc_m (float): Escala en píxeles por centímetro para el mapa.
-            - off_x (float): Offset en X para centrar el mapa.
-            - off_y (float): Offset en Y para centrar el mapa.
-    """
-    if not hist_m:
-        return MAP_ESC_V, m_w / 2, m_h / 2
-
-    xs, ys = [p[0] for p in hist_m], [p[1] for p in hist_m]
-    min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
-    r_x, r_y = max_x - min_x, max_y - min_y
-
-    sz_disp = m_w - 2 * MAP_PAD_PX
-    r_max = max(r_x, r_y)
-
-    esc_m = sz_disp / r_max if r_max > 0 else MAP_ESC_V
-    esc_m = min(esc_m, MAP_ESC_V)
-
-    c_x, c_y = (min_x + max_x) / 2, (min_y + max_y) / 2
-    off_x = m_w / 2 - (c_x * esc_m)
-    off_y = m_h / 2 + (c_y * esc_m)
-
-    if r_x == 0 and r_y == 0:
-        off_x, off_y = m_w / 2, m_h / 2
-        esc_m = MAP_ESC_V
-
-    return esc_m, off_x, off_y
-
-def normalize_cell_view(current_image, cell_target_size=(100, 100)):
-    """
-    Normaliza (redimensiona) una imagen a un tamaño objetivo para almacenamiento en el mapa.
-    
-    Args:
-        current_image (numpy.ndarray): Imagen a normalizar.
-        cell_target_size (tuple, optional): Tamaño objetivo (ancho, alto) en píxeles. Default: (100, 100).
-    
-    Returns:
-        numpy.ndarray: Imagen redimensionada o imagen original si falla el redimensionamiento.
-    """
+def normalize_cell_view(current_image: np.ndarray, cell_target_size: Tuple[int, int] = (100, 100)) -> np.ndarray:
     try:
         normalized_image = cv2.resize(current_image, cell_target_size, interpolation=cv2.INTER_AREA)
         return normalized_image
     except Exception:
         return current_image
 
-def register_image_to_map(current_image, existing_image):
-    """
-    Fusiona una imagen actual con una imagen existente del mapa mediante promedio ponderado.
-    
-    Args:
-        current_image (numpy.ndarray): Imagen actual a fusionar.
-        existing_image (numpy.ndarray): Imagen existente en el mapa.
-    
-    Returns:
-        numpy.ndarray: Imagen fusionada (promedio 50-50) o imagen existente si la fusión falla.
-    """
+def register_image_to_map(current_image: np.ndarray, existing_image: np.ndarray) -> np.ndarray:
     if existing_image is None or current_image is None or existing_image.shape != current_image.shape:
         return current_image
 
@@ -120,61 +42,68 @@ def register_image_to_map(current_image, existing_image):
     except Exception:
         return existing_image
 
+def map_trans(hist_m: List[Tuple[float, float]], m_w: int, m_h: int, config: ConfiguracionGlobal) -> Tuple[float, float, float]:
+    if not hist_m:
+        return config.MAP_ESC_V, m_w / 2, m_h / 2
 
-def detect_orange_markers(bgr_image):
-    """
-    Detecta marcadores naranjas (lazos de referencia) en una imagen BGR.
-    
-    Utiliza segmentación por color en espacio HSV y filtros de área y circularidad
-    para identificar objetos naranjas circulares.
-    
-    Args:
-        bgr_image (numpy.ndarray): Imagen en formato BGR.
-    
-    Returns:
-        list: Lista de diccionarios con información de cada marcador detectado:
-              [{'cx': int, 'cy': int, 'area': float, 'circ': float, 'bbox': (x, y, w, h)}]
-              Las coordenadas son relativas a la imagen de entrada.
-    """
-    if bgr_image is None:
-        return []
+    xs, ys = [p[0] for p in hist_m], [p[1] for p in hist_m]
+    min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
+    r_x, r_y = max_x - min_x, max_y - min_y
 
-    hsv = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2HSV)
-    lower = np.array(ORANGE_HSV_LOW, dtype=np.uint8)
-    upper = np.array(ORANGE_HSV_HIGH, dtype=np.uint8)
+    sz_disp = m_w - 2 * config.MAP_PAD_PX
+    r_max = max(r_x, r_y)
 
-    mask = cv2.inRange(hsv, lower, upper)
+    esc_m = sz_disp / r_max if r_max > 0 else config.MAP_ESC_V
+    esc_m = min(esc_m, config.MAP_ESC_V)
 
-    # Morfología para quitar ruido
-    kernel = np.ones((3, 3), np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+    c_x, c_y = (min_x + max_x) / 2, (min_y + max_y) / 2
+    off_x = m_w / 2 - (c_x * esc_m)
+    off_y = m_h / 2 + (c_y * esc_m)
 
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if r_x == 0 and r_y == 0:
+        off_x, off_y = m_w / 2, m_h / 2
+        esc_m = config.MAP_ESC_V
 
-    results = []
-    for c in contours:
-        area = cv2.contourArea(c)
-        if area < ORANGE_MIN_AREA or area > ORANGE_MAX_AREA:
-            continue
+    return esc_m, off_x, off_y
 
-        perimeter = cv2.arcLength(c, True)
-        if perimeter <= 0:
-            continue
-        circ = 4.0 * math.pi * area / (perimeter * perimeter)
+def open_svo_file(svo_path: str) -> Tuple[Optional[Generator[Tuple[bool, Optional[np.ndarray]], None, None]], int, int, int]:
+    try:
+        import pyzed.sl as sl
+    except ImportError:
+        return None, 0, 0, 0
 
-        if circ < ORANGE_CIRCULARITY:
-            # no es suficientemente circular
-            continue
+    zed = sl.Camera()
+    init_params = sl.InitParameters()
+    init_params.set_from_svo_file(svo_path)
+    init_params.svo_real_time_mode = False
 
-        M = cv2.moments(c)
-        if M['m00'] == 0:
-            continue
-        cX = int(M['m10'] / M['m00'])
-        cY = int(M['m01'] / M['m00'])
+    status = zed.open(init_params)
+    if status != sl.ERROR_CODE.SUCCESS:
+        return None, 0, 0, 0
 
-        x, y, w_box, h_box = cv2.boundingRect(c)
+    total_frames = zed.get_svo_number_of_frames()
+    cam_info = zed.get_camera_information()
+    w = cam_info.camera_resolution.width * 2
+    h = cam_info.camera_resolution.height
 
-        results.append({'cx': cX, 'cy': cY, 'area': area, 'circ': circ, 'bbox': (x, y, w_box, h_box)})
+    def frame_generator():
+        left_image = sl.Mat()
+        right_image = sl.Mat()
 
-    return results
+        while True:
+            if zed.grab() == sl.ERROR_CODE.SUCCESS:
+                zed.retrieve_image(left_image, sl.VIEW.LEFT)
+                zed.retrieve_image(right_image, sl.VIEW.RIGHT)
+
+                left_bgr = left_image.get_data()[:, :, :3]
+                right_bgr = right_image.get_data()[:, :, :3]
+
+                stereo_frame = np.hstack((left_bgr, right_bgr))
+
+                yield True, stereo_frame
+            else:
+                yield False, None
+                zed.close()
+                break
+
+    return frame_generator(), total_frames, w, h
