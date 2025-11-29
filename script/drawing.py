@@ -187,7 +187,32 @@ def dib_map(
     txt_pos = f"X: {pos_m_x:.2f} cm, Y: {pos_m_y:.2f} cm"
     txt_esc = f"Escala: 1:{1.0/esc_m:.2f} px/cm"
 
-    cv2.putText(canv_m, txt_pos, (10, sz - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, config.C_MAP_TXT, 2)
-    cv2.putText(canv_m, txt_esc, (sz - 300, sz - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, config.C_MAP_TXT, 2)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = max(0.5, min(0.9, sz / 1000.0 + 0.4))
+    thickness = 2
+    padding = 8
+
+    (tw1, th1), _ = cv2.getTextSize(txt_pos, font, font_scale, thickness)
+    (tw2, th2), _ = cv2.getTextSize(txt_esc, font, font_scale, thickness)
+
+    panel_w = max(tw1, tw2) + padding * 2
+    panel_h = (th1 + th2) + padding * 3
+    panel_x = 10
+    panel_y = 10
+
+    overlay = canv_m.copy()
+    cv2.rectangle(overlay, (panel_x, panel_y), (panel_x + panel_w, panel_y + panel_h), (0, 0, 0), -1)
+    alpha = 0.35
+    canv_m[panel_y:panel_y + panel_h, panel_x:panel_x + panel_w] = cv2.addWeighted(
+        overlay[panel_y:panel_y + panel_h, panel_x:panel_x + panel_w], alpha,
+        canv_m[panel_y:panel_y + panel_h, panel_x:panel_x + panel_w], 1 - alpha, 0
+    )
+
+    text_x = panel_x + padding
+    text_y1 = panel_y + padding + th1
+    text_y2 = text_y1 + padding + th2
+
+    cv2.putText(canv_m, txt_pos, (text_x, text_y1), font, font_scale, config.C_MAP_TXT, thickness)
+    cv2.putText(canv_m, txt_esc, (text_x, text_y2), font, font_scale, config.C_MAP_TXT, thickness)
 
     return cv2.resize(canv_m, (map_w_display, map_h_display))
