@@ -1,143 +1,143 @@
-import cv2
 import numpy as np
+import cv2
 import math
+from typing import List, Tuple, Dict, Any
+
+from config import ConfiguracionGlobal
 
 class GlobalMapper2D:
-    def __init__(self, center_x=500, center_y=500):
+    def __init__(self, config: ConfiguracionGlobal, center_x: float = 500.0, center_y: float = 500.0):
         self.map_size = 1000
-        self.global_x = float(center_x)
-        self.global_y = float(center_y)
-        self.global_angle = 0.0 # Radianes (0 = Mirando arriba)
+        self.global_x = center_x
+        self.global_y = center_y
+        self.global_angle = 0.0
+        self.trayectoria: List[Tuple[int, int]] = [(int(center_x), int(center_y))]
+        self.scale = 2.0
+        self.config = config
 
-        self.trayectoria = [] 
-        self.scale = 2.0 
-        
-    def update_position(self, tracked_objects):
-        # Necesitamos al menos 3 puntos para calcular una transformación afín confiable
+    def update_position(self, tracked_objects: List[Dict[str, Any]]):
         if len(tracked_objects) < 3: return
-        # 1. Obtener pares de puntos (Anterior -> Actual)
+
         prev_pts = []
         curr_pts = []
-        
+
         for obj in tracked_objects:
-            if len(obj['hist_vel']) > 0:
+            if len(obj['hist_vel']) > 0 and len(obj['hist_pos']) >= 2:
                 curr = obj['pos']
-                vel = obj['hist_vel'][-1]
-                # Reconstruir posición anterior: pos - velocidad
-                prev = (curr[0] - vel[0], curr[1] - vel[1])
-                
+                prev = obj['hist_pos'][-2]
+
                 prev_pts.append(prev)
                 curr_pts.append(curr)
-        
+
         if len(prev_pts) < 3: return
-        
-        # Conversión a numpy para OpenCV
+
         prev_np = np.array(prev_pts, dtype=np.float32).reshape(-1, 1, 2)
         curr_np = np.array(curr_pts, dtype=np.float32).reshape(-1, 1, 2)
-        
-        # 2. Calcular Matriz de Transformación (Rotación + Traslación)
-        # RANSAC elimina puntos erróneos (ruido que no es malla)
-        M, inliers = cv2.estimateAffinePartial2D(curr_np, prev_np)
-        
-        if M is not None:
-            # Extraer rotación y traslación de la matriz M
-            # M = [[cos, -sin, tx], [sin, cos, ty]]
-            dx_local = M[0, 2]
-            dy_local = M[1, 2]
-            d_angle = np.arctan2(M[1, 0], M[0, 0])
-            
-            # --- NUEVO: LIMITADOR DE VELOCIDAD ---
-            dist_sq = dx_local**2 + dy_local**2
-            
-            # Si el movimiento es absurdo (> 30px por frame), lo ignoramos (es ruido)
-            if dist_sq > 900: 
-                dx_local = 0
-                dy_local = 0
-                d_angle = 0
-            
-            # Factor de 'Cámara Lenta' para el mapa (El ROV es lento)
-            speed_k = 0.05  # <--- BAJAMOS ESTO MUCHO
-            
-            self.global_angle += d_angle * 0.5 # También suavizamos el giro
-            
-            # 4. Rotar el movimiento local al sistema global
-            # (Moverse "al frente" depende de hacia dónde mira el ROV)
-            c, s = np.cos(self.global_angle), np.sin(self.global_angle)
-            
-            # Rotación de vector 2D
-            dx_global = (dx_local * c - dy_local * s) * speed_k
-            dy_global = (dx_local * s + dy_local * c) * speed_k
-            
-            # --- NUEVO: NO SALIRSE DEL MAPA ---
-            new_x = self.global_x + dx_global
-            new_y = self.global_y + dy_global
-            
-            # Solo actualizamos si estamos dentro del margen (con un borde de 50px)
-            if 50 < new_x < self.map_size - 50:
-                self.global_x = new_x
-            if 50 < new_y < self.map_size - 50:
-                self.global_y = new_y
-            
+
+        M_obj_to_prev, inliers = cv2.estimateAffinePartial2D(curr_np, prev_np, method=cv2.RANSAC)
+
+        if M_obj_to_prev is not None:
+
+            dx_malla_local = -M_obj_to_prev[0, 2]
+            dy_malla_local = -M_obj_to_prev[1, 2]
+
+            d_angle_malla = np.arctan2(M_obj_to_prev[1, 0], M_obj_to_prev[0, 0])
+
+            d_angle_cam = -d_angle_malla
+
+            dist_sq = dx_malla_local**2 + dy_malla_local**2
+
+            if dist_sq > 900:
+                dx_malla_local = 0
+                dy_malla_local = 0
+                d_angle_cam = 0
+
+            self.global_angle += d_angle_cam * 0.5
+
             self.trayectoria.append((int(self.global_x), int(self.global_y)))
 
-    def draw_map(self, tracked_objects, is_quality_good=True):
+
+    def draw_map(self, tracked_objects: List[Dict[str, Any]], is_quality_good: bool = True, frames_history: List[List[Dict[str, Any]]] = None) -> np.ndarray:
+
+        if frames_history is None:
+            frames_history = []
+
+        CM_PER_MAP_PIXEL_LOCAL = 0.5
+
+        self.scale = self.config.MAP_ZOOM_FACTOR
+
+        cx_map_center = int(self.map_size / 2)
+        cy_map_center = int(self.map_size / 2)
+
+        offset_x = cx_map_center
+        offset_y = cy_map_center
+
+
         canvas = np.zeros((self.map_size, self.map_size, 3), dtype=np.uint8)
-        
-        # Grid
+
         for i in range(0, self.map_size, 100):
             cv2.line(canvas, (i, 0), (i, self.map_size), (30, 30, 30), 1)
-            cv2.line(canvas, (0, i), (self.map_size, i), (30, 30, 30), 1)
-        # Trayectoria
-        if len(self.trayectoria) > 1:
-            pts = np.array(self.trayectoria, np.int32).reshape((-1, 1, 2))
-            cv2.polylines(canvas, [pts], False, (0, 255, 255), 2)
-        # DIBUJAR ROV ROTADO (Triángulo)
-        cx, cy = int(self.global_x), int(self.global_y)
-        # Puntos base del triángulo mirando hacia "Arriba" (negativo Y)
-        tip = np.array([0, -15])
-        bl = np.array([-10, 10])
-        br = np.array([10, 10])
-        
-        # Matriz de rotación para el dibujo
+            cv2.line(canvas, (0, i), (i, self.map_size), (30, 30, 30), 1)
+
+        for i in range(len(self.trayectoria) - 1):
+            p1 = self.trayectoria[i]
+            p2 = self.trayectoria[i+1]
+
+            p1_map = (int(offset_x + (p1[0] - self.global_x) / CM_PER_MAP_PIXEL_LOCAL * self.scale),
+                      int(offset_y + (p1[1] - self.global_y) / CM_PER_MAP_PIXEL_LOCAL * self.scale))
+            p2_map = (int(offset_x + (p2[0] - self.global_x) / CM_PER_MAP_PIXEL_LOCAL * self.scale),
+                      int(offset_y + (p2[1] - self.global_y) / CM_PER_MAP_PIXEL_LOCAL * self.scale))
+
+            cv2.line(canvas, p1_map, p2_map, (0, 255, 255), 2)
+
+
+        cx_map = int(self.map_size / 2)
+        cy_map = int(self.map_size / 2)
+
+        rov_size_factor = 0.1
+
+        tip = np.array([0, -15]) * self.scale * rov_size_factor / CM_PER_MAP_PIXEL_LOCAL
+        bl = np.array([-10, 10]) * self.scale * rov_size_factor / CM_PER_MAP_PIXEL_LOCAL
+        br = np.array([10, 10]) * self.scale * rov_size_factor / CM_PER_MAP_PIXEL_LOCAL
+
         c, s = np.cos(self.global_angle), np.sin(self.global_angle)
         rot_mat = np.array([[c, -s], [s, c]])
-        
-        # Rotar puntos y trasladar al centro
-        p1 = np.dot(rot_mat, tip) + [cx, cy]
-        p2 = np.dot(rot_mat, bl) + [cx, cy]
-        p3 = np.dot(rot_mat, br) + [cx, cy]
-        
+
+        p1 = np.dot(rot_mat, tip) + [cx_map, cy_map]
+        p2 = np.dot(rot_mat, bl) + [cx_map, cy_map]
+        p3 = np.dot(rot_mat, br) + [cx_map, cy_map]
+
         pts_rov = np.array([p1, p2, p3], np.int32)
-        cv2.drawContours(canvas, [pts_rov], 0, (0, 0, 255), -1) # Rojo = ROV
-        
-        # Indicador de frente (Línea azul corta)
-        p_nose = np.dot(rot_mat, np.array([0, -25])) + [cx, cy]
-        cv2.line(canvas, (cx, cy), (int(p_nose[0]), int(p_nose[1])), (255, 0, 0), 2)
-        # Muros (Proyectados según rotación)
-        if is_quality_good and tracked_objects:
-            for obj in tracked_objects:
+        cv2.drawContours(canvas, [pts_rov], 0, (0, 0, 255), -1)
+
+        p_nose = np.dot(rot_mat, np.array([0, -25])) * self.scale * rov_size_factor / CM_PER_MAP_PIXEL_LOCAL + [cx_map, cy_map]
+        cv2.line(canvas, (cx_map, cy_map), (int(p_nose[0]), int(p_nose[1])), (255, 0, 0), 2)
+
+        for history_frame in frames_history:
+            for obj in history_frame:
                 u, v = obj['pos']
                 z = obj.get('depth_cm', 0)
                 if z > 0:
-                    # Posición relativa al ROV (Cámara)
-                    # x lateral, y profundidad (z)
-                    local_x = (u - 640) * 0.5 
-                    local_y = -z * self.scale # Negativo porque "al frente" es arriba en el mapa local
-                    
-                    # Rotar al mundo global
-                    world_x = local_x * c - local_y * s
-                    world_y = local_x * s + local_y * c
-                    
-                    wx = int(cx + world_x)
-                    wy = int(cy + world_y)
-                    
+                    cx_L = 640/2
+
+                    x_cam_cm = (u - cx_L) * z / self.config.FOCAL_PIX
+
+                    local_x_map_px = x_cam_cm / CM_PER_MAP_PIXEL_LOCAL
+                    local_y_map_px = -z / CM_PER_MAP_PIXEL_LOCAL
+
+                    world_x_map_px = local_x_map_px * c - local_y_map_px * s
+                    world_y_map_px = local_x_map_px * s + local_y_map_px * c
+
+                    wx = int(cx_map + world_x_map_px * self.scale)
+                    wy = int(cy_map + world_y_map_px * self.scale)
+
                     if 0 <= wx < self.map_size and 0 <= wy < self.map_size:
                         color = obj.get('color', (200,200,200))
                         cv2.circle(canvas, (wx, wy), 2, color, -1)
-        # Estado
+
         if is_quality_good:
             cv2.putText(canvas, f"ANG: {math.degrees(self.global_angle):.1f} deg", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         else:
             cv2.putText(canvas, "ESPERANDO DATOS...", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-            
+
         return canvas
