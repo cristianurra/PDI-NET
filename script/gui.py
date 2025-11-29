@@ -228,7 +228,7 @@ class StereoAppTkinter:
             try:
                 start_frame_str = simpledialog.askstring("2. Frame Inicial",
                                                          "Ingrese el frame desde el que desea iniciar el procesamiento (Ej: 0, 500):",
-                                                         initialvalue="0",
+                                                         initialvalue="500", #Comienza por defecto en 500 para eliminar los primeros frame de adaptacion y calibración de la camara.
                                                          parent=self.root)
                 if start_frame_str is None:
                     self.root.quit()
