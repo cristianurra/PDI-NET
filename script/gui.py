@@ -16,6 +16,7 @@ from tracker import Tracker
 from utils import open_svo_file, normalize_cell_view, register_image_to_map
 from stereo_processing import proc_seg, proc_mesh_mask, get_mesh_boundary_y_pos, get_cns, detect_orange_markers
 from drawing import dib_ayu, dib_mov, dib_escala_profundidad, dib_map
+from anomaly_detector import DamageDetector
 
 
 class ProcesadorEstereoThread(threading.Thread):
@@ -28,6 +29,7 @@ class ProcesadorEstereoThread(threading.Thread):
         self.mapeo = GlobalMapper2D(config)
         self.hist_celdas_vis: Dict[Tuple[int, int], Tuple[float, np.ndarray]] = {}
         self.tracked_objects_history: List[List[Dict[str, Any]]] = []
+        self.damage_detector = DamageDetector(config)
 
     def stop(self):
         self._running = False
@@ -117,10 +119,17 @@ class ProcesadorEstereoThread(threading.Thread):
                     if disp_rep > 1.0:
                         depth_cm = (self.config.FOCAL_PIX * self.config.BASELINE_CM) / disp_rep
 
+                frame_left = frame[:, :w//2]
+                frame_with_damages, damages_info = self.damage_detector.detect(frame_left)  
+                frame_top[:, :w//2] = frame_with_damages
+
+                
                 dib_ayu(frame_top, w, h, q_w, q_h, self.config)
                 del_p_x, del_p_y, vista_actual_limpia = dib_mov(frame_top, objs, w, h, depth_cm, self.config)
                 dib_escala_profundidad(frame_top, w, h, self.config)
 
+                
+                
                 try:
                     for x_start in [0, w // 2]:
                         x_end = x_start + (w // 2)

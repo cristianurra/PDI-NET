@@ -36,6 +36,7 @@ class ConfiguracionGlobal:
         self.C_NARAN = (0, 165, 255)
         self.C_GRIS = (100, 100, 100)
         self.C_ACT = (0, 255, 0)
+        self.C_DANO = (0, 0, 255)
 
         self.MESH_CONSOLIDATE_K = 7
         self.Y_MASK_OFFSET = 100
@@ -67,3 +68,9 @@ class ConfiguracionGlobal:
         self.SKIP_RATE = 1
         self.N_FRAMES_HISTORIAL = 5
         self.MAP_ZOOM_FACTOR = 10
+
+        self.DMG_ALPHA = 0.1
+        self.DMG_NUM_NB = 4
+        self.DMG_FRAMES = 6
+        self.DMG_THRESHOLD = 2.5
+        self.DMG_DIST_TRACK = 20
