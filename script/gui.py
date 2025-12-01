@@ -1,4 +1,3 @@
-
 import os
 import cv2
 import numpy as np
@@ -312,6 +311,9 @@ class StereoAppTkinter:
 
         ttk.Button(control_col_frame, text="🔴 Terminar Ejecución", command=self.on_closing, style='Danger.TButton').grid(row=3, column=0, sticky="ew", padx=5, pady=5)
 
+        # Botón para cambiar el video
+        ttk.Button(control_col_frame, text="🔄 Cambiar Video", command=self.change_video).grid(row=4, column=0, sticky="ew", padx=5, pady=5)
+
         self.style.configure('Danger.TButton', foreground='red', font=('Helvetica', 10, 'bold'))
 
     def _create_control_panel(self, parent):
@@ -467,3 +469,50 @@ class StereoAppTkinter:
             self.thread.stop()
             self.thread.join()
         self.root.destroy()
+
+    def change_video(self):
+        # Pausa y detiene el hilo actual de procesamiento
+        try:
+            if self.thread and self.thread.is_alive():
+                self.thread.stop()
+                self.thread.join(timeout=2.0)
+        except Exception:
+            pass
+
+        # Selector de nuevo archivo
+        new_file = filedialog.askopenfilename(
+            title="Seleccionar nuevo video (MP4 o SVO)",
+            filetypes=[("Archivos de Video", "*.mp4 *.avi *.svo"), ("Todos los archivos", "*.*")]
+        )
+        if not new_file:
+            return
+
+        # Solicita nuevo frame inicial
+        start_frame = self.config.START_FRAME
+        try:
+            start_str = simpledialog.askstring(
+                "Frame Inicial",
+                "Ingrese el frame inicial (Ej: 0, 500):",
+                initialvalue=str(start_frame),
+                parent=self.root,
+            )
+            if start_str is None:
+                return
+            start_frame = int(start_str)
+            if start_frame < 0:
+                messagebox.showerror("Error", "El frame inicial debe ser un número positivo.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Entrada inválida. Debe ser un número entero.")
+            return
+
+        # Actualiza configuración y UI
+        self.config.NOM_VID = new_file
+        self.config.START_FRAME = start_frame
+        self.video_label.config(text=f"Cargando: {os.path.basename(self.config.NOM_VID)}", image="")
+        self.depth_label.config(text="Profundidad: N/A")
+        self.pos_label.config(text="Posición Global: X: 0.0 cm, Y: 0.0 cm")
+        self.angle_label.config(text="Ángulo: 0.0°")
+
+        # Reinicia hilo de procesamiento con el nuevo video
+        self.start_processing_thread()
