@@ -5,21 +5,91 @@ from typing import List, Tuple, Dict, Any, Optional
 
 from config import ConfiguracionGlobal
 
+# Variable global para procesador CUDA (se inyecta desde gui)
+_cuda_processor = None
+
+def set_cuda_processor(cuda_proc):
+    """Establece el procesador CUDA para usar en este módulo."""
+    global _cuda_processor
+    _cuda_processor = cuda_proc
+
 def proc_seg(frame: np.ndarray, k_uni: np.ndarray, k_limp: np.ndarray) -> np.ndarray:
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-
-    binary = cv2.adaptiveThreshold(
-        src=blurred, maxValue=255, adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        thresholdType=cv2.THRESH_BINARY_INV, blockSize=15, C=1
-    )
-
-    closed = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, k_uni)
-    filtered = cv2.morphologyEx(closed, cv2.MORPH_OPEN, k_limp)
+    """
+    Procesa un frame para generar una imagen binaria segmentada con contornos de objetos.
+    
+    Pipeline de procesamiento:
+    1. Conversión a escala de grises
+    2. Suavizado gaussiano (3x3) para reducir ruido
+    3. Umbralización adaptativa Gaussiana (inversa, blockSize=15, C=1)
+    4. Cierre morfológico con k_uni para unir regiones cercanas
+    5. Apertura morfológica con k_limp para limpiar ruido pequeño
+    
+    Args:
+        frame: Imagen BGR de entrada
+        k_uni: Kernel para unificar/consolidar regiones (operación de cierre)
+        k_limp: Kernel para limpiar ruido (operación de apertura)
+    
+    Returns:
+        Imagen binaria filtrada (255=objeto, 0=fondo) con contornos limpios
+    
+    Note:
+        La umbralización adaptativa es más robusta a cambios de iluminación
+        que el umbral global, usando ventanas locales de 15x15 píxeles.
+    """
+    # Usar CUDA si está disponible (solo si OpenCV tiene soporte CUDA)
+    if _cuda_processor and _cuda_processor.opencv_cuda_available:
+        gray = _cuda_processor.cvt_color_cuda(frame, cv2.COLOR_BGR2GRAY)
+        blurred = _cuda_processor.gaussian_blur_cuda(gray, (3, 3), 0)
+        binary = _cuda_processor.adaptive_threshold_cuda(
+            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV, 15, 1
+        )
+        closed = _cuda_processor.morphology_cuda(binary, cv2.MORPH_CLOSE, k_uni)
+        filtered = _cuda_processor.morphology_cuda(closed, cv2.MORPH_OPEN, k_limp)
+    else:
+        # Procesamiento CPU tradicional (más común)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+        binary = cv2.adaptiveThreshold(
+            src=blurred, maxValue=255, adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            thresholdType=cv2.THRESH_BINARY_INV, blockSize=15, C=1
+        )
+        closed = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, k_uni)
+        filtered = cv2.morphologyEx(closed, cv2.MORPH_OPEN, k_limp)
+    
     return filtered
 
 
 def get_cns(cns_filt: np.ndarray, q_w: int, q_h: int, w: int, config: ConfiguracionGlobal, y_max_track: int = 9999) -> Tuple[List[Tuple[int, int]], List[Tuple[Tuple[Tuple[int, int], Tuple[int, int]], int]], List[Tuple[Tuple[int, int], int]]]:
+    """
+    Detecta contornos en imagen estéreo y realiza matching entre vistas izquierda/derecha.
+    
+    Proceso de matching estéreo:
+    1. Encuentra todos los contornos válidos (área >= 50, en cuadrantes activos)
+    2. Separa contornos en vista izquierda y derecha (mitad del frame)
+    3. Empareja contornos L-R que cumplan:
+       - Diferencia vertical <= Y_TOLERANCE (misma fila epipolar)
+       - Disparidad dentro de [MIN_DISPARITY, MAX_DISPARITY]
+    4. Calcula disparidad: disparity = x_left - x_right_ajustada
+    
+    Args:
+        cns_filt: Imagen binaria filtrada con contornos
+        q_w: Ancho de cada cuadrante de la grilla
+        q_h: Alto de cada cuadrante de la grilla
+        w: Ancho total del frame estéreo (izq + der)
+        config: Configuración con Q_ACT_BASE, tolerancias y límites de disparidad
+        y_max_track: Límite vertical máximo para tracking (no usado actualmente)
+    
+    Returns:
+        Tupla con tres listas:
+        1. cns_L_matched_only: Centroides izquierdos que tuvieron match [(x, y), ...]
+        2. matched_cns_pairs: Pares completos [((cL, cR), disparity), ...]
+        3. cns_disp_only: Centroides izq con su disparidad [((x, y), disp), ...]
+    
+    Note:
+        Solo considera contornos internos (holes) mediante jerarquía [3] != -1.
+        El matching es greedy: primer match válido se acepta.
+    """
     m_x = w // 2
 
     cns_all = []
@@ -72,6 +142,36 @@ def get_cns(cns_filt: np.ndarray, q_w: int, q_h: int, w: int, config: Configurac
 
 
 def proc_mesh_mask(frame: np.ndarray, mesh_consolidate_k: int, k_limp: np.ndarray, k_vert_fill: np.ndarray) -> Optional[np.ndarray]:
+    """
+    Genera una máscara binaria para detectar estructuras de malla/red en la imagen.
+    
+    Utiliza el canal de SATURACIÓN (HSV) en lugar de intensidad para mejor detección
+    de texturas y patrones de malla independientes de iluminación.
+    
+    Pipeline de procesamiento:
+    1. Conversión BGR -> HSV, extracción del canal de saturación
+    2. Suavizado gaussiano (3x3)
+    3. Umbralización adaptativa inversa (blockSize=15, C=1)
+    4. Erosión + Dilatación con kernel cuadrado (apertura modificada)
+    5. Cierre vertical con kernel rectangular (3 x 31) para conectar líneas verticales
+    6. Apertura final con k_limp para limpieza
+    
+    Args:
+        frame: Imagen BGR de entrada
+        mesh_consolidate_k: Tamaño del kernel cuadrado para consolidar (típ. 7)
+        k_limp: Kernel pequeño para limpieza final (típ. 3x3)
+        k_vert_fill: Kernel vertical para rellenar gaps en estructuras verticales
+    
+    Returns:
+        Máscara binaria con la malla detectada, o None si frame es None
+    
+    Note:
+        El kernel vertical (3x31) es clave para detectar patrones de malla con
+        líneas verticales dominantes. Configuración típica:
+        - mesh_consolidate_k = 7 (MESH_CONSOLIDATE_K)
+        - k_limp = 3x3 (K_LIMP)
+        - k_vert_fill = 3x31 (K_VERT_FILL)
+    """
     if frame is None:
         return None
 
@@ -98,6 +198,30 @@ def proc_mesh_mask(frame: np.ndarray, mesh_consolidate_k: int, k_limp: np.ndarra
 
 
 def get_mesh_boundary_y_pos(consolidated_mask: Optional[np.ndarray], w_half: int, h_total: int, kernel_edge: np.ndarray) -> int:
+    """
+    Detecta la posición Y del borde superior de la malla en la vista izquierda.
+    
+    Algoritmo de detección de borde:
+    1. Extrae mitad izquierda de la máscara consolidada
+    2. Binariza para asegurar valores 0/255
+    3. Detecta borde restando: boundary = original - erosionada
+    4. Encuentra contornos en el borde detectado
+    5. Filtra contornos grandes (área > 100) en mitad superior de la imagen
+    6. Retorna la mediana de las posiciones Y mínimas válidas
+    
+    Args:
+        consolidated_mask: Máscara binaria de la malla (frame completo estéreo)
+        w_half: Ancho de media imagen (para separar izq/der)
+        h_total: Alto total del frame
+        kernel_edge: Kernel para erosión en detección de bordes
+    
+    Returns:
+        Posición Y (fila) del borde superior de la malla, o 0 si no se detecta
+    
+    Note:
+        Solo considera la ROI superior (y < h_total/2) para evitar falsos positivos
+        en la parte inferior. Usa mediana para robustez ante outliers.
+    """
     if consolidated_mask is None:
         return 0
 
@@ -130,6 +254,43 @@ def get_mesh_boundary_y_pos(consolidated_mask: Optional[np.ndarray], w_half: int
 
 
 def detect_orange_markers(bgr_image: np.ndarray, config: ConfiguracionGlobal) -> List[Dict[str, Any]]:
+    """
+    Detecta marcadores naranjas circulares en la imagen usando segmentación por color.
+    
+    Pipeline de detección:
+    1. Conversión BGR -> HSV para segmentación robusta por color
+    2. Umbralización por rango HSV [ORANGE_HSV_LOW, ORANGE_HSV_HIGH]
+    3. Apertura morfológica (3x3) para eliminar ruido pequeño
+    4. Cierre morfológico (3x3) para rellenar huecos
+    5. Detección de contornos externos
+    6. Filtrado por criterios:
+       - Área: [ORANGE_MIN_AREA, ORANGE_MAX_AREA]
+       - Circularidad: >= ORANGE_CIRCULARITY
+    
+    Circularidad = 4π × área / perímetro²
+    - Círculo perfecto: 1.0
+    - Valores típicos aceptables: >= 0.4
+    
+    Args:
+        bgr_image: Imagen BGR de entrada
+        config: Configuración con rangos HSV y umbrales de validación
+    
+    Returns:
+        Lista de diccionarios, cada uno con:
+        - 'cx': Coordenada X del centroide
+        - 'cy': Coordenada Y del centroide  
+        - 'area': Área del marcador en píxeles
+        - 'circ': Circularidad calculada (0-1)
+        - 'bbox': Bounding box como tupla (x, y, ancho, alto)
+    
+    Note:
+        Configuración típica (config.py):
+        - ORANGE_HSV_LOW = (5, 120, 150)
+        - ORANGE_HSV_HIGH = (22, 255, 255)
+        - ORANGE_MIN_AREA = 30
+        - ORANGE_MAX_AREA = 5000
+        - ORANGE_CIRCULARITY = 0.4
+    """
     if bgr_image is None:
         return []
 

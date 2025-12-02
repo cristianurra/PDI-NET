@@ -25,7 +25,7 @@ def dib_escala_profundidad(frame: np.ndarray, w: int, h: int, config: Configurac
         frame[BAR_Y:y_end, BAR_X:x_end] = bar_img[0:(y_end - BAR_Y), 0:(x_end - BAR_X)]
 
 
-def dib_mov(frame: np.ndarray, objs: List[Dict[str, Any]], w: int, h: int, depth_cm: float, config: ConfiguracionGlobal) -> Tuple[float, float, np.ndarray]:
+def dib_mov(frame: np.ndarray, objs: List[Dict[str, Any]], w: int, h: int, depth_cm: float, config: ConfiguracionGlobal, mostrar_vector: bool = True) -> Tuple[float, float, np.ndarray]:
     vels_t = []
 
     objs_estables = [obj for obj in objs if obj['supervivencia_fr'] >= config.MIN_SUPERVIVENCIA_FR]
@@ -82,9 +82,56 @@ def dib_mov(frame: np.ndarray, objs: List[Dict[str, Any]], w: int, h: int, depth
     if vels_t:
         v_cam_x = float(np.median([v[0] for v in vels_t]))
         v_cam_y = float(np.median([v[1] for v in vels_t]))
-        dib_vec(vels_t, w // 2, h // 3, config.C_CAM, 'CAMARA')
+        if mostrar_vector:
+            # Dibujar en vista izquierda (siempre visible)
+            dib_vec(vels_t, w // 4, h // 3, config.C_CAM, 'CAMARA')
 
     return -v_cam_x, -v_cam_y, clean_area_image
+
+
+def dib_vector_yolo(frame: np.ndarray, w: int, h: int, velocity_x: float, velocity_y: float, config: ConfiguracionGlobal):
+    """
+    Dibuja el vector de odometría YOLO en la parte inferior de la vista mono.
+    
+    Args:
+        frame: Frame sobre el que dibujar
+        w: Ancho del frame
+        h: Alto del frame
+        velocity_x: Componente X de velocidad de la cámara
+        velocity_y: Componente Y de velocidad de la cámara
+        config: Configuración global
+    """
+    CIRCLE_RADIUS = 80
+    MAX_VECTOR_LENGTH = CIRCLE_RADIUS * 0.8
+    
+    # Centro en la parte inferior
+    c_x = w // 2
+    c_y = int(h * 2 / 3)
+    
+    # Dibujar círculo
+    cv2.circle(frame, (c_x, c_y), CIRCLE_RADIUS, (0, 255, 255), 5)  # Amarillo cian
+    
+    # Calcular vector
+    magnitude = np.sqrt(velocity_x**2 + velocity_y**2)
+    if magnitude > 0.5:  # Solo dibujar si hay movimiento significativo
+        scaled_vx = velocity_x * config.ESC_VEC
+        scaled_vy = velocity_y * config.ESC_VEC
+        current_length = magnitude * config.ESC_VEC
+        
+        # Limitar longitud máxima
+        if current_length > MAX_VECTOR_LENGTH:
+            scale_factor = MAX_VECTOR_LENGTH / current_length
+            scaled_vx *= scale_factor
+            scaled_vy *= scale_factor
+        
+        # Dibujar flecha (velocidad ya está en dirección correcta de cámara)
+        p2_x = int(c_x + scaled_vx)
+        p2_y = int(c_y + scaled_vy)
+        cv2.arrowedLine(frame, (c_x, c_y), (p2_x, p2_y), (0, 255, 255), 6, tipLength=0.4)
+    
+    # Etiqueta
+    cv2.putText(frame, "YOLO", (c_x - 30, c_y + CIRCLE_RADIUS + 25), 
+               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
 
 def dib_ayu(frame: np.ndarray, w: int, h: int, q_w: int, q_h: int, config: ConfiguracionGlobal):

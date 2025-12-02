@@ -6,9 +6,37 @@ from typing import Tuple, List, Dict, Any, Optional, Generator
 from config import ConfiguracionGlobal
 
 def dist(p1: Tuple[float, float], p2: Tuple[float, float]) -> float:
+    """
+    Calcula la distancia entre dos puntos en 2D.
+    
+    con d = sqrt((x2-x1)² + (y2-y1)²)
+    
+    Args:
+        p1: Primer punto como tupla (x, y)
+        p2: Segundo punto como tupla (x, y)
+    
+    Returns:
+        Distancia euclidiana entre los dos puntos
+    """
     return math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
 
 def depth_to_color(depth_cm: float, config: ConfiguracionGlobal) -> Tuple[int, int, int]:
+    """
+    Convierte una medida de profundidad en centímetros a un color BGR para visualización.
+    
+    Mapeo de colores según profundidad:
+    - Objetos cercanos (MIN_DEPTH_CM): Rojo (255, 0, 0)
+    - Objetos lejanos (MAX_DEPTH_CM): Azul (0, 0, 255)
+    - Profundidades intermedias: Gradiente de rojo a azul
+    - Fuera de rango: Azul puro
+    
+    Args:
+        depth_cm: Profundidad en centímetros
+        config: Objeto de configuración con MIN_DEPTH_CM y MAX_DEPTH_CM
+    
+    Returns:
+        Tupla (B, G, R)
+        """
     if depth_cm <= 0 or depth_cm >= config.MAX_DEPTH_CM:
         return (255, 0, 0)
 
@@ -25,6 +53,24 @@ def depth_to_color(depth_cm: float, config: ConfiguracionGlobal) -> Tuple[int, i
     return (B, G, R)
 
 def normalize_cell_view(current_image: np.ndarray, cell_target_size: Tuple[int, int] = (100, 100)) -> np.ndarray:
+    """
+    Redimensiona una imagen a un tamaño específico para visualización normalizada.
+    
+    Utiliza interpolación INTER_AREA,
+    
+    produciendo suavizados y evitando artefactos de muestreo.
+    
+    Args:
+        current_image: Imagen de entrada (numpy array)
+        cell_target_size: Tamaño objetivo como tupla (ancho, alto). Por defecto (100, 100)
+    
+    Returns:
+        Imagen redimensionada al tamaño objetivo, o la imagen original si falla
+    
+    Note:
+        Si ocurre algún error durante el redimensionamiento (ej. imagen inválida),
+        retorna la imagen original sin modificar.
+    """
     try:
         normalized_image = cv2.resize(current_image, cell_target_size, interpolation=cv2.INTER_AREA)
         return normalized_image
@@ -32,6 +78,27 @@ def normalize_cell_view(current_image: np.ndarray, cell_target_size: Tuple[int, 
         return current_image
 
 def register_image_to_map(current_image: np.ndarray, existing_image: np.ndarray) -> np.ndarray:
+    """
+    Fusiona dos imágenes mediante promediado ponderado para registro y acumulación.
+    
+    Combina una imagen existente con una nueva imagen usando pesos iguales (50%-50%).
+    Útil para crear mapas acumulativos o superponer información de múltiples frames.
+    
+    resultado = existing_image * 0.5 + current_image * 0.5
+    
+    Args:
+        current_image: Nueva imagen a fusionar
+        existing_image: Imagen existente/acumulada
+    
+    Returns:
+        Imagen fusionada si es posible, caso contrario:
+        - current_image si existing_image es None o tienen diferentes dimensiones
+        - existing_image si ocurre un error durante la fusión
+    
+    Note:
+        Ambas imágenes deben tener las mismas dimensiones (alto, ancho, canales)
+        para poder realizar la fusión.
+    """
     if existing_image is None or current_image is None or existing_image.shape != current_image.shape:
         return current_image
 
@@ -43,6 +110,35 @@ def register_image_to_map(current_image: np.ndarray, existing_image: np.ndarray)
         return existing_image
 
 def map_trans(hist_m: List[Tuple[float, float]], m_w: int, m_h: int, config: ConfiguracionGlobal) -> Tuple[float, float, float]:
+    """
+    Calcula los parámetros de transformación para visualizar un mapa 2D adaptativo.
+    
+    Determina la escala y desplazamientos necesarios para que todos los puntos
+    del historial quepan dentro del área de visualización del mapa, manteniendo
+    un padding y centrando el contenido.
+    
+    Proceso:
+    1. Encuentra el bounding box de todos los puntos históricos
+    2. Calcula la escala para que quepan con padding (MAP_PAD_PX)
+    3. Limita la escala máxima a MAP_ESC_V
+    4. Centra el contenido en el mapa
+    
+    Args:
+        hist_m: Lista de puntos históricos como tuplas (x, y) en coordenadas del mundo
+        m_w: Ancho del mapa en píxeles
+        m_h: Alto del mapa en píxeles
+        config: Configuración global con MAP_PAD_PX y MAP_ESC_V
+    
+    Returns:
+        Tupla (escala, offset_x, offset_y) donde:
+        - escala: Factor de escala píxeles/unidad-mundo
+        - offset_x: Desplazamiento horizontal para centrar
+        - offset_y: Desplazamiento vertical para centrar
+    
+    Note:
+        Si hist_m está vacío o todos los puntos son iguales, usa valores por defecto
+        centrados con escala MAP_ESC_V.
+    """
     if not hist_m:
         return config.MAP_ESC_V, m_w / 2, m_h / 2
 
@@ -67,6 +163,46 @@ def map_trans(hist_m: List[Tuple[float, float]], m_w: int, m_h: int, config: Con
     return esc_m, off_x, off_y
 
 def open_svo_file(svo_path: str) -> Tuple[Optional[Generator[Tuple[bool, Optional[np.ndarray]], None, None]], int, int, int]:
+    """
+    Abre un archivo SVO (ZED stereo video) y crea un generador para leer frames.
+    
+    Los archivos SVO son grabaciones de la cámara estéreo ZED. Esta función:
+    1. Inicializa la cámara ZED en modo reproducción (no tiempo real)
+    2. Obtiene información del video (total frames, resolución)
+    3. Crea un generador que produce frames estéreo concatenados horizontalmente
+    
+    Estructura del frame estéreo:
+    [Imagen Izquierda | Imagen Derecha] - Concatenadas horizontalmente
+    
+    Args:
+        svo_path: Ruta al archivo .svo
+    
+    Returns:
+        Tupla con:
+        - Generador que produce (success, frame) en cada iteración:
+            * success: True si se leyó correctamente, False al finalizar
+            * frame: numpy array BGR con ambas imágenes concatenadas, o None
+        - total_frames: Número total de frames en el video
+        - w: Ancho total del frame estéreo (ancho_izq + ancho_der)
+        - h: Alto del frame
+        
+        Retorna (None, 0, 0, 0) si:
+        - No está instalado pyzed
+        - No se puede abrir el archivo SVO
+    
+    Dividir la imagen estéreo:
+        >>> gen, total, width, height = open_svo_file("video.svo")
+        >>> if gen:
+        >>>     for success, frame in gen:
+        >>>         if success:
+        >>>             # Procesar frame estéreo
+        >>>             left = frame[:, :width//2]
+        >>>             right = frame[:, width//2:]
+    
+    Note:
+        Requiere la biblioteca pyzed instalada (ZED SDK de Stereolabs).
+        La cámara se cierra automáticamente cuando el generador termina.
+    """
     try:
         import pyzed.sl as sl
     except ImportError:

@@ -15,7 +15,9 @@ dist/
 *.egg-info/
 *.egg
 pip-wheel-metadata/
-
+*.png
+*.jpg
+*.ipynb
 # VS Code
 .vscode/
 

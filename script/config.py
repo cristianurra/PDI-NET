@@ -74,3 +74,19 @@ class ConfiguracionGlobal:
         self.DMG_FRAMES = 6
         self.DMG_THRESHOLD = 2.5
         self.DMG_DIST_TRACK = 20
+        
+        # Configuración de vista y tracking YOLO
+        self.VISTA_MONO = False
+        self.YOLO_MODEL_PATH = "models/best.pt"
+        self.YOLO_TRACKING_ENABLED = True
+        self.YOLO_SCALE_FACTOR = 1.5
+        self.YOLO_FRICTION = 0.95
+        self.YOLO_ACCELERATION = 0.2
+        
+        # Configuración de visualización de vectores
+        self.MOSTRAR_VECTOR_SUPERVIVENCIA = True
+        self.MOSTRAR_VECTOR_YOLO = True
+        
+        # Configuración de exportación de datos
+        self.OUTPUT_JSON_YOLO = "odometria_yolo.json"
+        self.OUTPUT_JSON_SUPERVIVENCIA = "odometria_supervivencia.json"
