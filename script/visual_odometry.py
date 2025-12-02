@@ -281,14 +281,12 @@ class AdaptiveTrajectoryDrawer:
                     
                     # Verificar que esté dentro del canvas
                     if 0 <= mx < self.canvas_width and 0 <= my < self.canvas_height:
-                        # Color según clase: 0=Borde (amarillo), 1=Nudo (magenta)
-                        marker_color = (0, 255, 255) if marker['class'] == 0 else (255, 0, 255)
+                        # Color según clase: 0=Marcador (rojo), 1=Nudo (magenta)
+                        marker_color = (0, 0, 255) if marker['class'] == 0 else (255, 0, 255)
                         
-                        # Dibujar círculo con el número del marcador
                         cv2.circle(canvas, (mx, my), 8, marker_color, -1)
                         cv2.circle(canvas, (mx, my), 8, (255, 255, 255), 1)
                         
-                        # Dibujar número
                         marker_text = str(marker_id)
                         text_size = cv2.getTextSize(marker_text, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0]
                         text_x = mx - text_size[0] // 2
@@ -323,9 +321,9 @@ class AdaptiveTrajectoryDrawer:
             cv2.putText(canvas, "Azul: Superv.", (5, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
             legend_y += 20
         if markers and len(markers) > 0:
+            # cv2.putText(canvas, "Rojo: Marcador", (5, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
+            # legend_y += 18
             cv2.putText(canvas, "Rojo: Marcador", (5, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
-            legend_y += 18
-            cv2.putText(canvas, "Amarillo: Borde", (5, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 255), 1)
             legend_y += 18
             cv2.putText(canvas, "Magenta: Nudo", (5, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 0, 255), 1)
         

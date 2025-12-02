@@ -7,7 +7,7 @@ class ConfiguracionGlobal:
         self.RAD_PUN = 6
         self.UMB_DIST = 75
         self.N_VEL_PR = 10
-        self.MIN_SUPERVIVENCIA_FR = 1
+        self.MIN_SUPERVIVENCIA_FR = 4
         self.FRAMES_MAX_ESTATICO = 3
         self.Q_X = 6
         self.Q_Y = 5

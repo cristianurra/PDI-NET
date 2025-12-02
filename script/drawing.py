@@ -51,7 +51,7 @@ def dib_mov(frame: np.ndarray, objs: List[Dict[str, Any]], w: int, h: int, depth
 
     def dib_vec(vels: List[Tuple[float, float]], c_x: int, c_y: int, color: Tuple[int, int, int], lbl: str = ""):
         if vels:
-            CIRCLE_RADIUS = 120
+            CIRCLE_RADIUS = 80
             MAX_VECTOR_LENGTH = CIRCLE_RADIUS * 0.8
 
             cv2.circle(frame, (c_x, c_y), CIRCLE_RADIUS, config.C_CAM, 6)

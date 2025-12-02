@@ -228,22 +228,22 @@ class ProcesadorEstereoThread(threading.Thread):
                     mat_yolo[2, 3] = 0.0
                     self.matrices_yolo.append(mat_yolo.tolist())
                     
-                    # Procesar marcadores inmediatamente
+                    # Procesar marcadores inmediatamente (Bordes y Nudos)
                     for det in detections:
-                        if det['crossed_center']:
-                            # Verificar sincronización
+                        if det['crossed_center']:  # Ambas clases: 0=marcador, 1=Nudo
+                            # Usar la longitud actual de la trayectoria como índice
                             traj_len = len(self.visual_odometry.get_trajectory())
                             mat_len = len(self.matrices_yolo)
                             
                             marker = {
-                                'frame_index': len(self.matrices_yolo) - 1,  # Índice de la matriz recién guardada
+                                'frame_index': traj_len - 1,  # Índice de la trayectoria actual
                                 'class': det['class'],
                                 'name': det['name'],
                                 'id': det['id'],
                                 'marker_id': len(self.yolo_markers) + 1
                             }
                             self.yolo_markers.append(marker)
-                            print(f"⭐ Marcador {marker['marker_id']}: {det['name']} (ID:{det['id']}) en frame_idx={marker['frame_index']}, pos=({yolo_pos[0]:.1f}, {yolo_pos[1]:.1f}) cm [traj_len={traj_len}, mat_len={mat_len}]")
+                            print(f"Marcador {marker['marker_id']}: {det['name']} (ID:{det['id']}) en frame_idx={marker['frame_index']}, pos=({yolo_pos[0]:.1f}, {yolo_pos[1]:.1f}) cm [traj_len={traj_len}, mat_len={mat_len}]")
                     
                     # Usar frame con tracking como base
                     frame_left = frame_tracked
@@ -957,9 +957,9 @@ class StereoAppTkinter:
                                 mx = matrix[0, 3] * 10.0  # Ya está en metros, amplificar x10
                                 my = matrix[1, 3] * 10.0  # Ya tiene -Y invertido
                                 
-                                # Color según clase: 0=Borde (amarillo), 1=Nudo (magenta)
+                                # Color según clase: 0=Borde (rojo), 1=Nudo (magenta)
                                 if marker['class'] == 0:
-                                    marker_color = [1, 1, 0]  # Amarillo (borde)
+                                    marker_color = [1, 0, 0]  # Rojo (borde)
                                 else:
                                     marker_color = [1, 0, 1]  # Magenta (nudo)
                                 
@@ -984,7 +984,7 @@ class StereoAppTkinter:
                     print(f"  Verde (YOLO): {num_yolo_valid}/{num_yolo} puntos con movimiento")
                     print(f"  Azul (Supervivencia): {num_superv_valid}/{num_superv} puntos con movimiento")
                     if num_markers > 0:
-                        print(f"  🎯 {num_markers} marcadores (Amarillo=Borde, Magenta=Nudo)")
+                        print(f"  🎯 {num_markers} marcadores (Rojo=Borde, Magenta=Nudo)")
                     print(f"{'='*60}\n")
                     o3d.visualization.draw_geometries(
                         geometries, 
