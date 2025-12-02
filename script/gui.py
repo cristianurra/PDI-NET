@@ -34,7 +34,8 @@ class ProcesadorEstereoThread(threading.Thread):
         self.hist_celdas_vis: Dict[Tuple[int, int], Tuple[float, np.ndarray]] = {}
         self.tracked_objects_history: List[List[Dict[str, Any]]] = []
         self.damage_detector = DamageDetector(config)
-<<<<<<< HEAD
+        self.damage_log: List[Dict[str, Any]] = [] 
+        self.last_map_radar = None
         self.yolo_tracker = YOLOTracker(config)
         self.visual_odometry = VisualOdometry(config)
         self.odometry_drawer = AdaptiveTrajectoryDrawer(canvas_width=400, canvas_height=300)
@@ -55,10 +56,6 @@ class ProcesadorEstereoThread(threading.Thread):
         
         # Marcadores de detección YOLO (bordes, nudos)
         self.yolo_markers = []  # Lista de {'pos_x': float, 'pos_y': float, 'class': int, 'name': str, 'id': int}
-=======
-        self.damage_log: List[Dict[str, Any]] = [] 
-        self.last_map_radar = None
->>>>>>> 684fcd36e169525981e212b31ff1c4e84da4c5a3
 
     def stop(self):
         print("[STOP] Solicitando detención del thread...")
