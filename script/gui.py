@@ -29,6 +29,8 @@ class ProcesadorEstereoThread(threading.Thread):
         self.hist_celdas_vis: Dict[Tuple[int, int], Tuple[float, np.ndarray]] = {}
         self.tracked_objects_history: List[List[Dict[str, Any]]] = []
         self.damage_detector = DamageDetector(config)
+        self.damage_log: List[Dict[str, Any]] = [] 
+        self.last_map_radar = None
 
     def stop(self):
         self._running = False
@@ -122,6 +124,11 @@ class ProcesadorEstereoThread(threading.Thread):
                 frame_with_damages, damages_info = self.damage_detector.detect(frame_left)  
                 frame_top[:, :w//2] = frame_with_damages
 
+                for dmg in damages_info:
+                    dmg['frame'] = frame_counter
+                    dmg['global_x'] = pos_m_x
+                    dmg['global_y'] = pos_m_y
+                    self.damage_log.append(dmg)
                 
                 dib_ayu(frame_top, w, h, q_w, q_h, self.config)
                 del_p_x, del_p_y, vista_actual_limpia = dib_mov(frame_top, objs, w, h, depth_cm, self.config)
@@ -170,6 +177,8 @@ class ProcesadorEstereoThread(threading.Thread):
                 map_display_h = 400
 
                 map_radar = self.mapeo.draw_map(objs, frames_history=self.tracked_objects_history)
+
+                self.last_map_radar = map_radar
 
                 canv_m = dib_map(
                     self.hist_celdas_vis, pos_m_x, pos_m_y, self.config.FIXED_GRID_SIZE_CM,
@@ -313,6 +322,8 @@ class StereoAppTkinter:
 
         # Botón para cambiar el video
         ttk.Button(control_col_frame, text="🔄 Cambiar Video", command=self.change_video).grid(row=4, column=0, sticky="ew", padx=5, pady=5)
+
+        ttk.Button(control_col_frame, text="💾 Guardar Reporte", command=self.guardar_reporte).grid(row=5, column=0, sticky="ew", padx=5, pady=5)
 
         self.style.configure('Danger.TButton', foreground='red', font=('Helvetica', 10, 'bold'))
 
@@ -516,3 +527,43 @@ class StereoAppTkinter:
 
         # Reinicia hilo de procesamiento con el nuevo video
         self.start_processing_thread()
+
+    def guardar_reporte(self):
+        if not self.thread:
+            messagebox.showwarning("Aviso", "No hay procesamiento activo.")
+            return
+
+        # self.config.NOM_VID es algo como "C:/Usuarios/Video/jaula_01.mp4"
+        nombre_archivo = os.path.basename(self.config.NOM_VID)  # "jaula_01.mp4"
+        nombre_limpio = os.path.splitext(nombre_archivo)[0]     # "jaula_01"
+        
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        
+        nombre_base = f"Reporte_{nombre_limpio}_{timestamp}"
+
+        if self.thread.last_map_radar is not None:
+            nombre_img = f"{nombre_base}_MAPA.png"
+            cv2.imwrite(nombre_img, self.thread.last_map_radar)
+        
+        nombre_csv = f"{nombre_base}_DAÑOS.csv"
+        try:
+            with open(nombre_csv, "w", encoding="utf-8") as f:
+                f.write("ID_Daño;Frame;X_Global_cm;Y_Global_cm;Area_px\n")
+                
+                unique_damages = {}
+                
+                for dmg in self.thread.damage_log:
+                    id_d = dmg['id']
+                    fr = dmg['frame']
+                    glob_x = dmg.get('global_x', 0.0)
+                    glob_y = dmg.get('global_y', 0.0) 
+                    area = dmg.get('area', 0) # Si tu detector retorna área
+                    gx_str = f"{glob_x:.2f}".replace('.', ',')
+                    gy_str = f"{glob_y:.2f}".replace('.', ',')
+                    area_str = f"{area:.2f}".replace('.', ',')
+                    f.write(f"{id_d};{fr};{gx_str};{gy_str};{area_str}\n")
+            
+            messagebox.showinfo("Éxito", f"Reporte guardado:\n{nombre_img}\n{nombre_csv}")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar el reporte: {str(e)}")
