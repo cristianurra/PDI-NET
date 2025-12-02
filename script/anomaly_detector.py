@@ -23,10 +23,12 @@ class DamageDetector:
             maxValue=255,
             adaptiveMethod=cv2.ADAPTIVE_THRESH_MEAN_C,
             thresholdType=cv2.THRESH_BINARY,
-            blockSize=75,
+            blockSize=15,
             C=0
         )
 
+        kernel_limpieza = np.ones((3, 3), np.uint8)
+        th = cv2.morphologyEx(th, cv2.MORPH_OPEN, kernel_limpieza)
         n_white = cv2.countNonZero(th)
         if n_white > (width * height) / 2:
              th = cv2.bitwise_not(th)
@@ -95,12 +97,12 @@ class DamageDetector:
                 max_neighbor_area = np.max(neighbor_areas)
 
                 candidates_current.append([
-                    curr_ct,        # 0: Centroide (x,y)
-                    rects[i],       # 1: Rect (x,y,w,h)
-                    0,              # 2: Frame count (temporal)
-                    0,              # 3: ID
-                    area,           # 4: Area actual
-                    max_neighbor_area # 5: Area vecino max
+                    curr_ct,        
+                    rects[i],       
+                    0,              
+                    0,              
+                    area,           
+                    max_neighbor_area 
                 ])
 
 
@@ -119,7 +121,7 @@ class DamageDetector:
                     best_match_idx = idx
 
 
-            # Usamos una distancia umbral un poco más grande si ya tiene historia
+            
             dist_threshold = self.config.DMG_DIST_TRACK
             if prev[2] > self.config.DMG_FRAMES:
                  dist_threshold = 100 # Tracking más laxo si ya está confirmado
@@ -129,7 +131,7 @@ class DamageDetector:
                 
 
                 if match[4] > self.config.DMG_THRESHOLD * match[5]:
-                    # Actualizar contadores del previo
+                    
                     frames_alive = prev[2] + 1
                     current_id = prev[3]
 
@@ -145,13 +147,13 @@ class DamageDetector:
                     
                     final_candidates_next_frame.append(match)
 
-                    # Si está confirmado (maduro), lo dibujamos
                     if frames_alive >= self.config.DMG_FRAMES:
                         self._draw_damage(frame_result, match)
                         confirmed_damages.append({
                             'id': current_id,
                             'rect': match[1],
-                            'centroid': match[0]
+                            'centroid': match[0],
+                            'area': match[4]
                         })
 
 
