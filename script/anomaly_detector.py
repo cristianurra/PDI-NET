@@ -26,8 +26,7 @@ class DamageDetector:
             blockSize=15,
             C=0
         )
-        ########################################################
-        cv2.imshow("DEBUG 1: Threshold Crudo", th)
+
         kernel_limpieza = np.ones((3, 3), np.uint8)
         th = cv2.morphologyEx(th, cv2.MORPH_OPEN, kernel_limpieza)
         n_white = cv2.countNonZero(th)
@@ -46,8 +45,7 @@ class DamageDetector:
         net_mask = cv2.morphologyEx(net_mask, cv2.MORPH_CLOSE, self.kernel_morph, iterations=1)
 
         holes_mask = cv2.bitwise_not(net_mask)
-######################################################################################
-        cv2.imshow("DEBUG: Lo que ve el detector", holes_mask)
+
         cv2.rectangle(holes_mask, (0,0), (width, height), 0, 10) 
         
         num_holes, _, hole_stats, hole_centroids = cv2.connectedComponentsWithStats(holes_mask, 4)

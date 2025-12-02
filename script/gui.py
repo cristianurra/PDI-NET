@@ -533,9 +533,8 @@ class StereoAppTkinter:
             messagebox.showwarning("Aviso", "No hay procesamiento activo.")
             return
 
-        # self.config.NOM_VID es algo como "C:/Usuarios/Video/jaula_01.mp4"
-        nombre_archivo = os.path.basename(self.config.NOM_VID)  # "jaula_01.mp4"
-        nombre_limpio = os.path.splitext(nombre_archivo)[0]     # "jaula_01"
+        nombre_archivo = os.path.basename(self.config.NOM_VID)  
+        nombre_limpio = os.path.splitext(nombre_archivo)[0]     
         
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         
