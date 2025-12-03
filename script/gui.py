@@ -57,6 +57,15 @@ class ProcesadorEstereoThread(threading.Thread):
         # Marcadores de detección YOLO (bordes, nudos)
         self.yolo_markers = []  # Lista de {'pos_x': float, 'pos_y': float, 'class': int, 'name': str, 'id': int}
 
+        self.marcadores_contados = 0
+        self.distancia_real_acumulada = 0.0
+        self.distancia_puntos_actual = 0.0
+        self.distancia_yolo_actual = 0.0
+        self.mejor_algoritmo = "Recopilando datos..."
+        self.color_ganador = "#FFFFFF"
+
+        self.ids_marcadores_procesados = set()
+
     def stop(self):
         print("[STOP] Solicitando detención del thread...")
         self._running = False
@@ -113,6 +122,9 @@ class ProcesadorEstereoThread(threading.Thread):
         self.pos_supervivencia_y = 0.0
         self.trajectory_supervivencia = []
         self.yolo_markers = []  # Limpiar marcadores
+        self.ids_marcadores_procesados = set()
+        self.marcadores_contados = 0
+        self.distancia_real_acumulada = 0.0
         
         # Limpiar archivos JSON existentes
         import json
@@ -250,6 +262,7 @@ class ProcesadorEstereoThread(threading.Thread):
                 else:
                     vectors_x, vectors_y, detections = [], [], []
                 
+                
                 # Detectar daños sobre frame con tracking
                 frame_with_damages, damages_info = self.damage_detector.detect(frame_left)  
                 frame_top[:, :w//2] = frame_with_damages
@@ -260,6 +273,31 @@ class ProcesadorEstereoThread(threading.Thread):
                     dmg['global_y'] = pos_m_y
                     self.damage_log.append(dmg)
                 
+                self.distancia_puntos_actual = math.hypot(self.pos_supervivencia_x, self.pos_supervivencia_y)
+                #yolo_pos = self.visual_odometry.get_position()
+                self.distancia_yolo_actual = math.hypot(yolo_pos[0], yolo_pos[1]) if self.config.YOLO_TRACKING_ENABLED else 0.0
+
+                for det in detections:
+                    if det['class'] == 0 and det['crossed_center']:
+                        marker_id = det['id']
+                        if marker_id not in self.ids_marcadores_procesados:
+                            self.marcadores_contados += 1
+                            self.distancia_real_acumulada += 100.0
+                            self.ids_marcadores_procesados.add(marker_id)
+
+                            diff_puntos = abs(self.distancia_real_acumulada - self.distancia_puntos_actual)
+                            diff_yolo = abs(self.distancia_real_acumulada - self.distancia_yolo_actual)
+                            if diff_yolo < diff_puntos:
+                                self.mejor_algoritmo = "YOLO"
+                                self.color_ganador = "#00FF00"
+                            elif diff_puntos < diff_yolo:
+                                self.mejor_algoritmo = "Puntos"
+                                self.color_ganador = "#FFFF00"
+                            else:
+                                self.mejor_algoritmo = "Empate"
+                                self.color_ganador = "#FFFFFF"
+                            print(f"Marcador detectado: Real={self.distancia_real_acumulada:.1f} cm, Puntos={self.distancia_puntos_actual:.1f} cm, YOLO={self.distancia_yolo_actual:.1f} cm -> Mejor: {self.mejor_algoritmo}")
+
                 dib_ayu(frame_top, w, h, q_w, q_h, self.config)
                 del_p_x, del_p_y, vista_actual_limpia = dib_mov(frame_top, objs, w, h, depth_cm, self.config, self.config.MOSTRAR_VECTOR_SUPERVIVENCIA)
                 dib_escala_profundidad(frame_top, w, h, self.config)

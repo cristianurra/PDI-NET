@@ -23,7 +23,7 @@ class DamageDetector:
             maxValue=255,
             adaptiveMethod=cv2.ADAPTIVE_THRESH_MEAN_C,
             thresholdType=cv2.THRESH_BINARY,
-            blockSize=15,
+            blockSize=20,
             C=0
         )
 
