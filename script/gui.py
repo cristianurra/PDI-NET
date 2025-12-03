@@ -55,7 +55,10 @@ class ProcesadorEstereoThread(threading.Thread):
         self.total_frames = 0
         
         # Marcadores de detección YOLO (bordes, nudos)
-        self.yolo_markers = []  # Lista de {'pos_x': float, 'pos_y': float, 'class': int, 'name': str, 'id': int}
+        self.yolo_markers = []  # Lista de {'frame_index', 'class', 'name', 'id', 'marker_id', 'pos_x', 'pos_y'}
+        self.marcador_counter = 0  # Contador para marcadores (clase 0)
+        self.nudo_counter = 0  # Contador para nudos (clase 1)
+        self.marker_proximity_threshold = 20.0  # cm - distancia mínima para considerar duplicado
 
         self.marcadores_contados = 0
         self.distancia_real_acumulada = 0.0
@@ -128,6 +131,8 @@ class ProcesadorEstereoThread(threading.Thread):
         self.pos_supervivencia_y = 0.0
         self.trajectory_supervivencia = []
         self.yolo_markers = []  # Limpiar marcadores
+        self.marcador_counter = 0
+        self.nudo_counter = 0
         self.ids_marcadores_procesados = set()
         self.marcadores_contados = 0
         self.distancia_real_acumulada = 0.0
@@ -276,15 +281,41 @@ class ProcesadorEstereoThread(threading.Thread):
                             traj_len = len(self.visual_odometry.get_trajectory())
                             mat_len = len(self.matrices_yolo)
                             
-                            marker = {
-                                'frame_index': traj_len - 1,  # Índice de la trayectoria actual
-                                'class': det['class'],
-                                'name': det['name'],
-                                'id': det['id'],
-                                'marker_id': len(self.yolo_markers) + 1
-                            }
-                            self.yolo_markers.append(marker)
-                            print(f"Marcador {marker['marker_id']}: {det['name']} (ID:{det['id']}) en frame_idx={marker['frame_index']}, pos=({yolo_pos[0]:.1f}, {yolo_pos[1]:.1f}) cm [traj_len={traj_len}, mat_len={mat_len}]")
+                            # Verificar si ya existe un marcador cercano del mismo tipo
+                            is_duplicate = False
+                            for existing_marker in self.yolo_markers:
+                                if existing_marker['class'] == det['class']:
+                                    # Calcular distancia desde la posición del marcador existente
+                                    existing_pos = self.visual_odometry.get_trajectory()[existing_marker['frame_index']]
+                                    current_pos = yolo_pos
+                                    dist = ((existing_pos[0] - current_pos[0])**2 + 
+                                           (existing_pos[1] - current_pos[1])**2)**0.5
+                                    
+                                    if dist < self.marker_proximity_threshold:
+                                        is_duplicate = True
+                                        print(f"⚠️ Marcador duplicado ignorado: {det['name']} a {dist:.1f}cm del marcador {existing_marker['marker_id']}")
+                                        break
+                            
+                            if not is_duplicate:
+                                # Incrementar contador según clase
+                                if det['class'] == 0:  # Marcador (Borde)
+                                    self.marcador_counter += 1
+                                    marker_id = f"M{self.marcador_counter}"
+                                else:  # Nudo
+                                    self.nudo_counter += 1
+                                    marker_id = f"N{self.nudo_counter}"
+                                
+                                marker = {
+                                    'frame_index': traj_len - 1,  # Índice de la trayectoria actual
+                                    'class': det['class'],
+                                    'name': det['name'],
+                                    'id': det['id'],
+                                    'marker_id': marker_id,
+                                    'pos_x': yolo_pos[0],
+                                    'pos_y': yolo_pos[1]
+                                }
+                                self.yolo_markers.append(marker)
+                                print(f"Marcador {marker['marker_id']}: {det['name']} (ID:{det['id']}) en frame_idx={marker['frame_index']}, pos=({yolo_pos[0]:.1f}, {yolo_pos[1]:.1f}) cm [traj_len={traj_len}, mat_len={mat_len}]")
                     
                     # Usar frame con tracking como base
                     frame_left = frame_tracked
