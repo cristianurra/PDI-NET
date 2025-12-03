@@ -19,6 +19,10 @@ pip-wheel-metadata/
 *.jpg
 *.ipynb
 *.json
+odometria_supervivencia.json
+odometria_yolo.json
+
+*.csv
 # VS Code
 .vscode/
 
