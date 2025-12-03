@@ -78,10 +78,10 @@ class ConfiguracionGlobal:
         
         # Configuración de vista y tracking YOLO
         self.VISTA_MONO = False
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        self.YOLO_MODEL_PATH = os.path.join(project_root, "models", "best.pt")
-        #self.YOLO_MODEL_PATH = "models/best.pt"
+        #current_dir = os.path.dirname(os.path.abspath(__file__))
+        #project_root = os.path.dirname(current_dir)
+        #self.YOLO_MODEL_PATH = os.path.join(project_root, "models", "best.pt")
+        self.YOLO_MODEL_PATH = "models/best.pt"
         self.YOLO_TRACKING_ENABLED = True
         self.YOLO_SCALE_FACTOR = 1.5
         self.YOLO_FRICTION = 0.95
