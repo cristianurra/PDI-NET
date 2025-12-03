@@ -65,6 +65,12 @@ class ProcesadorEstereoThread(threading.Thread):
         self.color_ganador = "#FFFFFF"
 
         self.ids_marcadores_procesados = set()
+        
+        # Variables para FPS
+        self.fps_current = 0.0
+        self.fps_average = 0.0
+        self.fps_frame_times = []
+        self.fps_last_time = time.time()
 
     def stop(self):
         print("[STOP] Solicitando detención del thread...")
@@ -168,6 +174,14 @@ class ProcesadorEstereoThread(threading.Thread):
             return
 
         q_w, q_h = w // self.config.Q_X, h // self.config.Q_Y
+        
+        # Función auxiliar para dibujar texto con sombra mejorada
+        def draw_text_with_shadow(img, text, pos, font, scale, color, thickness):
+            x, y = pos
+            # Sombra negra más gruesa y con offset mayor para mejor contraste
+            cv2.putText(img, text, (x+3, y+3), font, scale, (0, 0, 0), thickness+2, cv2.LINE_AA)
+            # Texto blanco principal
+            cv2.putText(img, text, (x, y), font, scale, color, thickness, cv2.LINE_AA)
 
         tracker = Tracker(self.config.UMB_DIST, self.config.N_VEL_PR, self.config)
         pos_m_x, pos_m_y = 0.0, 0.0
@@ -182,6 +196,21 @@ class ProcesadorEstereoThread(threading.Thread):
 
             if not self._running:
                 break
+            
+            # Calcular FPS
+            current_time = time.time()
+            frame_time = current_time - self.fps_last_time
+            self.fps_last_time = current_time
+            
+            if frame_time > 0:
+                self.fps_current = 1.0 / frame_time
+                self.fps_frame_times.append(frame_time)
+                # Mantener solo los últimos 30 frames para el promedio
+                if len(self.fps_frame_times) > 30:
+                    self.fps_frame_times.pop(0)
+                # Calcular FPS promedio
+                avg_frame_time = sum(self.fps_frame_times) / len(self.fps_frame_times)
+                self.fps_average = 1.0 / avg_frame_time if avg_frame_time > 0 else 0.0
 
             if frame_counter % self.config.SKIP_RATE == 0:
 
@@ -411,6 +440,15 @@ class ProcesadorEstereoThread(threading.Thread):
                     markers=self.yolo_markers  # Pasar marcadores YOLO
                 )
                 
+                # Dibujar FPS en la esquina superior izquierda (ANTES de enviar a GUI)
+                fps_text_current = f"FPS: {self.fps_current:.1f}"
+                fps_text_avg = f"Avg: {self.fps_average:.1f}"
+                # Usar tamaño de fuente más grande (0.8) y grosor 2 para mejor visibilidad
+                draw_text_with_shadow(frame_top, fps_text_current, (10, 30), 
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                draw_text_with_shadow(frame_top, fps_text_avg, (10, 65), 
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                
                 self.gui_ref.root.after(0, self.gui_ref.actualizar_gui, frame_top, cns_filt_left_eye, canv_m, map_radar, odometry_graph, depth_cm, pos_m_x, pos_m_y, self.mapeo.global_angle, self.current_frame, self.total_frames)
             
             # IMPORTANTE: Guardar matrices en CADA frame para trazado 3D completo
@@ -491,11 +529,12 @@ class StereoAppTkinter:
         self.hw_optimizer, self.cuda_processor = initialize_hardware_optimization()
 
         try:
+            # Intentar maximizar, pero si falla, usar tamaño HD por defecto
+            self.root.geometry("1280x720+50+50")  # HD (720p) centrado
             self.root.state('zoomed')
         except tk.TclError:
-            width = self.root.winfo_screenwidth()
-            height = self.root.winfo_screenheight()
-            self.root.geometry(f"{width}x{height}+0+0")
+            # Si no puede maximizar, mantener tamaño HD
+            self.root.geometry("1280x720+50+50")
             self.root.state('normal')
 
         self.thread: ProcesadorEstereoThread = None
