@@ -324,6 +324,68 @@ Localiza balizas o marcadores circulares de color naranja.
 
 ### 4. `tracker.py` (Seguimiento de puntos)
 
+**Clase principal**: `Tracker`  
+Permite el seguimiento de puntos basado en el tiempo de superviciencia y la diferencia de posicion en cada frame. Sin dependencias externas (no usa SORT, DeepSORT ni ByteTrack).
+
+#### Parámetros principales (configurables)
+| Parámetro           | Origen en config                     | Uso                                           |
+|---------------------|--------------------------------------|-----------------------------------------------|
+| `max_d`             | `UMB_DIST`                           | Umbral máximo de distancia para asociación   |
+| `len_v`             | `N_VEL_PR`                           | Longitud del historial de velocidades         |
+| `FRAMES_MAX_ESTATICO`| —                                   | Frames consecutivos estático → eliminación    |
+| `N_DEPTH_PR`        | —                                    | Ventana de historial para mediana de profundidad |
+
+#### Flujo principal
+
+1. **Predicción**  
+   Para cada objeto existente:  
+   `pos_pred = pos_actual + mediana(hist_vel)`  
+
+2. **Matching greedy (más cercano primero)**  
+   - Busca el contorno nuevo más cercano a la posición predicha  
+   - Solo acepta si `dist < UMB_DIST`  
+   - Cada contorno nuevo solo puede usarse una vez
+
+3. **Actualización de objetos con match**
+   - Actualiza historial de posiciones (`hist_pos`)
+   - Detecta estado **estático** → si lleva `FRAMES_MAX_ESTATICO` sin moverse → supervivencia = 0
+   - Si se mueve:
+     - Calcula velocidad instantánea
+     - Calcula profundidad:
+       $$
+       \text{depth}_\text{cm} = \frac{\text{FOCAL\_PIX} \times \text{BASELINE\_CM}}{\text{disparidad}}
+       $$
+     - Añade a `hist_depth` → valor final = **mediana** (muy estable)
+     - Asigna color visual con `depth_to_color()` (rojo cerca, azul lejos)
+     - Incrementa contador de supervivencia
+
+4. **Gestión de objetos sin match**
+   - Decrementa `supervivencia_fr`
+   - Se mantienen solo si ≥ 1
+
+5. **Creación de nuevos objetos**
+   - Contornos no asociados → nuevo tracker con:
+     - ID único
+     - Supervivencia = 1
+     - Historiales inicializados
+     - Profundidad y color calculados desde el primer frame
+
+6. **Limpieza final**
+   - `self.objs` se actualiza eliminando todos con `supervivencia_fr < 1`
+
+#### Estructura de cada objeto rastreado (dict)
+{
+    'id': int,
+    'pos': (x, y),           # posición 2D izquierda
+    'pos_R': (x_r, y_r),     # posición correspondiente derecha
+    'depth_cm': float,       # profundidad suavizada (mediana)
+    'color': (B, G, R),      # color según distancia
+    'hist_vel': [(vx,vy)...],
+    'hist_depth': [d...],
+    'hist_pos': [(x,y)...],
+    'supervivencia_fr': int
+}
+
 ### 5. `drawing.py` (Visualización)
 
 ### 6. `main.py` (Bucle Principal)
