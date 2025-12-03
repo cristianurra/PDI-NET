@@ -2,5 +2,7 @@ Pillow>=10.0.0
 opencv-python
 numpy
 tqdm
-pyzed==3.8
-# Optional: if you need to work with ZED .svo files, install the ZED SDK or use the ZED Python bindings (not provided here)
+ultralytics
+open3d
+#pyzed==3.8
+# Nota : pyzed est á comentado para evitar errores si no tiene el SDK instalado .
