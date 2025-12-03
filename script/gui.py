@@ -74,7 +74,7 @@ class ProcesadorEstereoThread(threading.Thread):
         try:
             self._save_tracking_data()
         except Exception as e:
-            print(f"⚠ Error al guardar datos: {e}")
+            print(f" Error al guardar datos: {e}")
     
     def _save_tracking_data(self):
         """Guarda los datos de tracking en archivos JSON."""
@@ -91,21 +91,21 @@ class ProcesadorEstereoThread(threading.Thread):
                     json.dump(self.matrices_yolo, f)
                 print(f"✓ Guardados {len(self.matrices_yolo)} frames YOLO en {self.config.OUTPUT_JSON_YOLO}")
             else:
-                print(f"⚠ No hay datos YOLO para guardar")
+                print(f" No hay datos YOLO para guardar")
             
             if self.matrices_supervivencia:
                 with open(self.config.OUTPUT_JSON_SUPERVIVENCIA, 'w') as f:
                     json.dump(self.matrices_supervivencia, f)
                 print(f"✓ Guardados {len(self.matrices_supervivencia)} frames Supervivencia en {self.config.OUTPUT_JSON_SUPERVIVENCIA}")
             else:
-                print(f"⚠ No hay datos de Supervivencia para guardar")
+                print(f" No hay datos de Supervivencia para guardar")
                 # Guardar array vacío para que el archivo exista
                 with open(self.config.OUTPUT_JSON_SUPERVIVENCIA, 'w') as f:
                     json.dump([], f)
                 print(f"  (Archivo vacío creado: {self.config.OUTPUT_JSON_SUPERVIVENCIA})")
         except Exception as e:
             import traceback
-            print(f"❌ Error guardando tracking data: {e}")
+            print(f" Error guardando tracking data: {e}")
             traceback.print_exc()
 
     def pause(self):
@@ -135,7 +135,7 @@ class ProcesadorEstereoThread(threading.Thread):
                 json.dump([], f)
             print("✓ Archivos JSON inicializados (vacíos)")
         except Exception as e:
-            print(f"⚠ Error al limpiar archivos JSON: {e}")
+            print(f" Error al limpiar archivos JSON: {e}")
         
         # Inyectar procesador CUDA en stereo_processing
         if self.cuda_processor:
@@ -709,7 +709,7 @@ class StereoAppTkinter:
 
         self._create_control_panel(control_col_frame).grid(row=2, column=0, sticky="ew", padx=5, pady=5)
 
-        ttk.Button(control_col_frame, text="🔴 Terminar Ejecución", command=self.on_closing, style='Danger.TButton').grid(row=3, column=0, sticky="ew", padx=5, pady=5)
+        ttk.Button(control_col_frame, text=" Terminar Ejecución", command=self.on_closing, style='Danger.TButton').grid(row=3, column=0, sticky="ew", padx=5, pady=5)
 
         # Botón para cambiar el video
         ttk.Button(control_col_frame, text="🔄 Cambiar Video", command=self.change_video).grid(row=4, column=0, sticky="ew", padx=5, pady=5)
@@ -854,7 +854,7 @@ class StereoAppTkinter:
                         json.dump(self.thread.matrices_supervivencia, f)
                     print(f"✓ Datos actualizados en archivos JSON")
                 else:
-                    print(f"⚠ No hay thread activo, leyendo archivos JSON existentes...")
+                    print(f" No hay thread activo, leyendo archivos JSON existentes...")
                 radius_sphere = 0.1
                 radius_line = 0.05
                 geometries = []
@@ -1152,24 +1152,6 @@ class StereoAppTkinter:
         if not new_file:
             return
 
-        # Comentado temporalmente - no es necesario solicitar frame inicial
-        # start_frame = self.config.START_FRAME
-        # try:
-        #     start_str = simpledialog.askstring(
-        #         "Frame Inicial",
-        #         "Ingrese el frame inicial (Ej: 0, 500):",
-        #         initialvalue=str(start_frame),
-        #         parent=self.root,
-        #     )
-        #     if start_str is None:
-        #         return
-        #     start_frame = int(start_str)
-        #     if start_frame < 0:
-        #         messagebox.showerror("Error", "El frame inicial debe ser un número positivo.")
-        #         return
-        # except ValueError:
-        #     messagebox.showerror("Error", "Entrada inválida. Debe ser un número entero.")
-        #     return
 
         # Actualiza configuración y UI
         self.config.NOM_VID = new_file
