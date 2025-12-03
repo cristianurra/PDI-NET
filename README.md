@@ -201,12 +201,10 @@ Este archivo contiene todos los parámetros numéricos y de configuración.
 
 ***
 
-### 2. `utils.py` (Funciones de necesarias)
-
-Contiene funciones matemáticas y de ayuda usadas por los módulos de rastreo y dibujo.
 
 ### 2. `utils.py` (Funciones necesarias)
 
+Contiene funciones matemáticas y de ayuda usadas por los módulos de rastreo y dibujo.
 #### Funciones Matemáticas Fundamentales
 
 **Cálculo de Distancia Euclidiana**  
