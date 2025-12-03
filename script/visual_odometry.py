@@ -80,8 +80,9 @@ class VisualOdometry:
             self.status_color = (0, 255, 255)
         
         # Actualizar posición
+        # Invertir Y porque en imagen Y+ es abajo, pero en coordenadas Y+ es arriba
         self.cam_pos_x += self.velocity_x
-        self.cam_pos_y += self.velocity_y
+        self.cam_pos_y -= self.velocity_y  # Invertir Y
         
         # Guardar en historial
         self.trajectory.append((self.cam_pos_x, self.cam_pos_y))
@@ -130,6 +131,7 @@ class AdaptiveTrajectoryDrawer:
             status_color: Tuple[int, int, int] = (200, 200, 200),
             trajectory2: Optional[List[Tuple[float, float]]] = None,
             current_pos2: Optional[Tuple[float, float]] = None,
+            velocity2: Optional[Tuple[float, float]] = None,
             markers: Optional[List[dict]] = None) -> np.ndarray:
         """
         Dibuja el gráfico de trayectoria adaptativo.
@@ -200,10 +202,11 @@ class AdaptiveTrajectoryDrawer:
             norm_x = (wx - min_x) / range_x
             norm_y = (wy - min_y) / range_y
             
-            # Convertir a píxeles (Y positivo hacia arriba en el mundo, hacia abajo en pantalla)
-            # Invertimos Y para que arriba en mundo = arriba en pantalla
+            # Convertir a píxeles
+            # Y positivo hacia arriba en el mundo, pero hacia abajo en pantalla
+            # Invertimos Y: 1 - norm_y para que arriba en mundo = arriba en pantalla
             sx = int(norm_x * drawable_width + self.margin)
-            sy = int(norm_y * drawable_height + self.margin)
+            sy = int((1 - norm_y) * drawable_height + self.margin)
             
             return (sx, sy)
         
@@ -248,6 +251,15 @@ class AdaptiveTrajectoryDrawer:
                 curr_sx2, curr_sy2 = world_to_screen(current_pos2[0], current_pos2[1])
                 cv2.circle(canvas, (curr_sx2, curr_sy2), 5, (255, 0, 0), -1)  # Azul
                 cv2.circle(canvas, (curr_sx2, curr_sy2), 7, (200, 100, 0), 2)
+                
+                # Dibujar flecha de velocidad de supervivencia (roja)
+                if velocity2 and (velocity2[0] != 0 or velocity2[1] != 0):
+                    vel_scale = 5
+                    end_wx2 = current_pos2[0] + velocity2[0] * vel_scale
+                    end_wy2 = current_pos2[1] - velocity2[1] * vel_scale  # Invertir Y
+                    end_sx2, end_sy2 = world_to_screen(end_wx2, end_wy2)
+                    cv2.arrowedLine(canvas, (curr_sx2, curr_sy2), (end_sx2, end_sy2), 
+                                  (0, 0, 255), 2, tipLength=0.3)  # Rojo
         
         # Dibujar posición actual (punto grande)
         curr_sx, curr_sy = world_to_screen(current_pos[0], current_pos[1])
@@ -258,7 +270,7 @@ class AdaptiveTrajectoryDrawer:
         if velocity[0] != 0 or velocity[1] != 0:
             vel_scale = 5
             end_wx = current_pos[0] + velocity[0] * vel_scale
-            end_wy = current_pos[1] + velocity[1] * vel_scale
+            end_wy = current_pos[1] - velocity[1] * vel_scale  # Invertir Y
             end_sx, end_sy = world_to_screen(end_wx, end_wy)
             cv2.arrowedLine(canvas, (curr_sx, curr_sy), (end_sx, end_sy), 
                           (0, 0, 255), 2, tipLength=0.3)
@@ -307,22 +319,63 @@ class AdaptiveTrajectoryDrawer:
             if markers_drawn > 0:
                 print(f"✅ Dibujados {markers_drawn} marcadores ({markers_skipped} saltados)")
         
-        # Dibujar información
-        cv2.putText(canvas, f"Pos: ({current_pos[0]:.1f}, {current_pos[1]:.1f})", 
-                   (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
-        cv2.putText(canvas, f"Rango X: {range_x:.1f} | Y: {range_y:.1f}", 
-                   (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (150, 150, 150), 1)
+        # Dibujar posiciones en las esquinas superiores
+        # Esquina superior izquierda: Posición YOLO
+        cv2.putText(canvas, f"YOLO: ({current_pos[0]:.1f}, {current_pos[1]:.1f})", 
+                   (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
         
-        # Leyenda
-        legend_y = 60
-        cv2.putText(canvas, "Verde: YOLO", (5, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
-        legend_y += 20
-        if trajectory2:
-            cv2.putText(canvas, "Azul: Superv.", (5, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
-            legend_y += 20
+        # Esquina superior derecha: Posición Supervivencia
+        if current_pos2:
+            text_superv = f"Superv: ({current_pos2[0]:.1f}, {current_pos2[1]:.1f})"
+            text_size = cv2.getTextSize(text_superv, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0]
+            cv2.putText(canvas, text_superv, 
+                       (self.canvas_width - text_size[0] - 5, 15), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
+        
+        # Dibujar valores de ejes en los extremos (donde están las líneas grises)
+        # Calcular posición del origen en pantalla
+        if min_x <= 0 <= max_x and min_y <= 0 <= max_y:
+            origin_sx, origin_sy = world_to_screen(0, 0)
+            
+            # Calcular posiciones de los extremos de cada eje
+            left_sx, _ = world_to_screen(min_x, 0)
+            right_sx, _ = world_to_screen(max_x, 0)
+            _, top_sy = world_to_screen(0, max_y)
+            _, bottom_sy = world_to_screen(0, min_y)
+            
+            # Eje X horizontal (valores en la línea horizontal del origen)
+            # -X (extremo izquierdo del eje X)
+            label_x_left = f"{min_x:.0f}"
+            text_size_x_left = cv2.getTextSize(label_x_left, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0]
+            cv2.putText(canvas, label_x_left, 
+                       (left_sx - text_size_x_left[0]//2, origin_sy - 5), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (180, 180, 180), 1)
+            
+            # +X (extremo derecho del eje X)
+            label_x_right = f"{max_x:.0f}"
+            text_size_x_right = cv2.getTextSize(label_x_right, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0]
+            cv2.putText(canvas, label_x_right, 
+                       (right_sx - text_size_x_right[0]//2, origin_sy - 5), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (180, 180, 180), 1)
+            
+            # Eje Y vertical (valores en la línea vertical del origen)
+            # +Y (extremo superior del eje Y)
+            label_y_top = f"{max_y:.0f}"
+            text_size_y_top = cv2.getTextSize(label_y_top, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0]
+            cv2.putText(canvas, label_y_top, 
+                       (origin_sx + 5, top_sy + text_size_y_top[1]//2), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (180, 180, 180), 1)
+            
+            # -Y (extremo inferior del eje Y)
+            label_y_bottom = f"{min_y:.0f}"
+            text_size_y_bottom = cv2.getTextSize(label_y_bottom, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0]
+            cv2.putText(canvas, label_y_bottom, 
+                       (origin_sx + 5, bottom_sy + text_size_y_bottom[1]//2), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (180, 180, 180), 1)
+        
+        # Leyenda solo para marcadores (esquina inferior izquierda, sobre el status)
         if markers and len(markers) > 0:
-            # cv2.putText(canvas, "Rojo: Marcador", (5, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
-            # legend_y += 18
+            legend_y = self.canvas_height - 45
             cv2.putText(canvas, "Rojo: Marcador", (5, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
             legend_y += 18
             cv2.putText(canvas, "Magenta: Nudo", (5, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 0, 255), 1)

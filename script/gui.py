@@ -371,8 +371,9 @@ class ProcesadorEstereoThread(threading.Thread):
                 pos_m_y += del_c_y
                 
                 # Actualizar posición de supervivencia para odometría
+                # Invertir Y porque en imagen Y+ es abajo, pero en coordenadas Y+ es arriba
                 self.pos_supervivencia_x += del_c_x
-                self.pos_supervivencia_y += del_c_y
+                self.pos_supervivencia_y -= del_c_y  # Invertir Y
                 
                 # Debug: Mostrar valores cada 30 frames
                 if frame_counter % 30 == 0:
@@ -428,6 +429,10 @@ class ProcesadorEstereoThread(threading.Thread):
                     self.config.FIXED_GRID_SIZE_CM, self.config.FIXED_GRID_SIZE_CM, self.config
                 )
 
+                # Calcular velocidad de supervivencia para el gráfico de odometría
+                del_c_x_frame = del_p_x * self.config.CM_POR_PX if 'del_p_x' in locals() else 0.0
+                del_c_y_frame = del_p_y * self.config.CM_POR_PX if 'del_p_y' in locals() else 0.0
+
                 # Generar gráfico de odometría visual
                 odometry_graph = self.odometry_drawer.draw(
                     self.visual_odometry.get_trajectory(),
@@ -437,6 +442,7 @@ class ProcesadorEstereoThread(threading.Thread):
                     self.visual_odometry.status_color,
                     trajectory2=self.trajectory_supervivencia,
                     current_pos2=(self.pos_supervivencia_x, self.pos_supervivencia_y),
+                    velocity2=(del_c_x_frame, del_c_y_frame),
                     markers=self.yolo_markers  # Pasar marcadores YOLO
                 )
                 
@@ -454,12 +460,10 @@ class ProcesadorEstereoThread(threading.Thread):
             # IMPORTANTE: Guardar matrices en CADA frame para trazado 3D completo
             # (Fuera del if SKIP_RATE para garantizar continuidad)
             
-            # Actualizar posición de supervivencia
-            del_c_x_frame = del_p_x * self.config.CM_POR_PX if 'del_p_x' in locals() else 0.0
-            del_c_y_frame = del_p_y * self.config.CM_POR_PX if 'del_p_y' in locals() else 0.0
-            
+            # Actualizar posición de supervivencia (ya calculado arriba para odometría)
+            # Invertir Y porque en imagen Y+ es abajo, pero en coordenadas Y+ es arriba
             self.pos_supervivencia_x += del_c_x_frame
-            self.pos_supervivencia_y += del_c_y_frame
+            self.pos_supervivencia_y -= del_c_y_frame  # Invertir Y
             
             # Matriz de supervivencia - guardar en cada frame
             mat_superv = np.eye(4)
