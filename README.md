@@ -205,13 +205,56 @@ Este archivo contiene todos los parámetros numéricos y de configuración.
 
 Contiene funciones matemáticas y de ayuda usadas por los módulos de rastreo y dibujo.
 
-| Función | Propósito |
-| :--- | :--- |
-| `dist(p1, p2)` | Calcula la **distancia euclidiana** entre dos puntos en el plano. |
-| `depth_to_color(depth_cm)` | Mapea un valor de profundidad (en cm) a un color BGR para visualización (rojo=cercano, azul=lejano). |
-| `map_trans(hist_m, m_w, m_h)` | Calcula la **escala** y el **desplazamiento** necesarios para centrar y encajar el área explorada del mapa dentro del lienzo. |
-| `normalize_cell_view(...)` | Redimensiona una porción de la imagen a un tamaño estándar para guardarla como vista de una celda del mapa. |
-| `register_image_to_map(...)` | Combina una nueva vista de una celda con su imagen ya existente usando un promedio ponderado. |
+### 2. `utils.py` (Funciones necesarias)
+
+#### Funciones Matemáticas Fundamentales
+
+**Cálculo de Distancia Euclidiana**  
+- **Función**: `dist(p1, p2)`  
+- **Propósito**: Calcula la distancia euclidiana entre dos puntos 2D  
+  $p_1 = (x_1, y_1)$ y $p_2 = (x_2, y_2)$  
+  $$d = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}$$
+
+#### Funciones de Visualización y Fusión de Imágenes
+
+**Conversión de Profundidad a Color**  
+- **Función**: `depth_to_color(depth_cm, config)`  
+- **Propósito**: Convierte un valor de profundidad (en cm) en un color BGR intuitivo.  
+  - `MIN_DEPTH_CM` → Rojo intenso `(0, 0, 255)`  
+  - `MAX_DEPTH_CM` → Azul intenso `(255, 0, 0)`  
+  - Intermedios → Gradiente suave rojo a azul  
+  - Fuera de rango → Rojo puro `(255, 0, 0)`
+
+**Normalización de Vista de Celda**  
+- **Función**: `normalize_cell_view(current_image, cell_target_size=100)`  
+- **Propósito**: Redimensiona cualquier imagen a un tamaño fijo (por defecto 100×100 px) para visualización uniforme en rejillas. Usa `cv2.INTER_AREA` (óptima para reducción, resultados suaves).
+
+**Fusión de Imágenes para Acumulación**  
+- **Función**: `register_image_to_map(current_image, existing_image)`  
+- **Propósito**: Combina una imagen nueva con un mapa acumulado existente mediante promedio ponderado 50%-50% (`cv2.addWeighted`). Usada para construir mapas persistentes a lo largo de múltiples frames.
+
+#### Funciones de Mapeo y Transformación
+
+**Cálculo de Transformación para Visualización de Mapa 2D**  
+- **Función**: `map_trans(hist_m, m_w, m_h, config)`  
+- **Propósito**: Determina escala y traslación para mostrar todos los puntos históricos (`hist_m`) centrados y visibles en un lienzo de tamaño `m_w × m_h`.  
+  **Pasos**:  
+  1. Bounding box de los puntos históricos  
+  2. Factor de escala con padding  
+  3. Límite superior mediante `MAP_ESC_V`  
+  4. Offsets para centrado
+
+#### Funciones de Entrada de Video Estéreo (ZED SVO)
+
+**Apertura y Generador de Frames SVO**  
+- **Función**: `open_svo_file(svo_path)`  
+- **Propósito**: Abre un archivo `.svo` de cámara ZED y devuelve un generador de frames estéreo listos para procesar.  
+  **Proceso**:  
+  1. Inicializa ZED en modo reproducción  
+  2. Recupera imagen izquierda + derecha por iteración  
+  3. Concatena horizontalmente: `[Izquierda | Derecha]`  
+  **Salida**: generador de frames, número total de frames y resolución combinada.  
+  Es la función principal de carga de datos para todo el pipeline estéreo.
 
 ***
 
