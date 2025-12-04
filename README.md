@@ -574,35 +574,3 @@ Identificar agujeros anómalos (daños) en una malla/red comparando el tamaño d
 **Salida**:
 frame_con_daños, lista_daños_confirmados = detector.detect(frame)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### 6. `main.py` (Bucle Principal)
-
-### 7. `corrección` (Video de Entrada Recodificado)
-
-
-Comando genérico (reemplace rutas y nombres de archivo según corresponda):
-
-```
-ffmpeg -y -i <archivo_entrada.mp4> -c:v libx264 -pix_fmt yuv420p -movflags +faststart <archivo_salida_h264.mp4>
-```
-
-Ejemplo aplicado al proyecto:
-
-```
-ffmpeg -y -i stereonr.mp4 -c:v libx264 -pix_fmt yuv420p -movflags +faststart stereo_h264.mp4
-```
-
-Esta conversión mantiene la calidad razonable y asegura compatibilidad con players web y contenedores que requieren `yuv420p` y `faststart`.
