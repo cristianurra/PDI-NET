@@ -279,7 +279,7 @@ class AdaptiveTrajectoryDrawer:
         if markers and len(markers) > 0:
             markers_drawn = 0
             markers_skipped = 0
-            print(f"🎯 Intentando dibujar {len(markers)} marcadores, trayectoria tiene {len(trajectory)} puntos")
+            # print(f"Intentando dibujar {len(markers)} marcadores, trayectoria tiene {len(trajectory)} puntos")
             
             for marker in markers:
                 # Obtener posición desde la trayectoria usando el índice del frame
@@ -314,10 +314,10 @@ class AdaptiveTrajectoryDrawer:
                 else:
                     markers_skipped += 1
                     # Debug: imprimir marcadores que no se pueden dibujar
-                    print(f"⚠️ Marcador {marker_id} índice inválido: frame_idx={frame_idx}, traj_len={len(trajectory)}")
+                    print(f"Marcador {marker_id} índice inválido: frame_idx={frame_idx}, traj_len={len(trajectory)}")
             
-            if markers_drawn > 0:
-                print(f"✅ Dibujados {markers_drawn} marcadores ({markers_skipped} saltados)")
+            # if markers_drawn > 0:
+            #     print(f"Dibujados {markers_drawn} marcadores ({markers_skipped} saltados)")
         
         # Dibujar posiciones en las esquinas superiores
         # Esquina superior izquierda: Posición YOLO

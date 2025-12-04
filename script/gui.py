@@ -5,6 +5,8 @@ import math
 import time
 import threading
 import json
+import csv
+from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 from PIL import Image, ImageTk
@@ -66,14 +68,30 @@ class ProcesadorEstereoThread(threading.Thread):
         self.distancia_yolo_actual = 0.0
         self.mejor_algoritmo = "Recopilando datos..."
         self.color_ganador = "#FFFFFF"
+        
+        # Variables para medir distancia entre marcadores consecutivos
+        self.ultimo_marcador_pos_yolo = None  # (x, y) en el último marcador
+        self.ultimo_marcador_pos_superv = None  # (x, y) en el último marcador
 
         self.ids_marcadores_procesados = set()
+        
+        # Lista para guardar mediciones de marcadores en CSV
+        self.mediciones_marcadores = []
         
         # Variables para FPS
         self.fps_current = 0.0
         self.fps_average = 0.0
         self.fps_frame_times = []
         self.fps_last_time = time.time()
+        
+        # Carpeta única para esta sesión
+        self.session_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.session_folder = os.path.join('report', f'sesion_{self.session_timestamp}')
+        os.makedirs(self.session_folder, exist_ok=True)
+        
+        # Metadatos de la sesión
+        self.session_start_time = datetime.now()
+        self.frames_procesados = 0
 
     def stop(self):
         print("[STOP] Solicitando detención del thread...")
@@ -86,32 +104,144 @@ class ProcesadorEstereoThread(threading.Thread):
             print(f" Error al guardar datos: {e}")
     
     def _save_tracking_data(self):
-        """Guarda los datos de tracking en archivos JSON."""
+        """Guarda los datos de tracking en archivos JSON, CSV e imágenes organizados por sesión."""
         try:
             import json
+            import platform
             
-            # Siempre intentar guardar, incluso si está vacío (para debug)
-            print(f"DEBUG: Intentando guardar tracking data...")
+            session_end_time = datetime.now()
+            duracion_sesion = (session_end_time - self.session_start_time).total_seconds()
+            
+            print(f"\n{'='*60}")
+            print(f"GUARDANDO DATOS DE SESIÓN: {self.session_folder}")
+            print(f"{'='*60}")
             print(f"  - matrices_yolo: {len(self.matrices_yolo)} frames")
             print(f"  - matrices_supervivencia: {len(self.matrices_supervivencia)} frames")
+            print(f"  - mediciones_marcadores: {len(self.mediciones_marcadores)} registros")
+            print(f"  - imágenes capturadas: {len(self.hist_celdas_vis)} celdas")
             
+            # 1. GUARDAR INFORMACIÓN DE LA SESIÓN (TXT)
+            info_path = os.path.join(self.session_folder, 'info_sesion.txt')
+            with open(info_path, 'w', encoding='utf-8') as f:
+                f.write("="*60 + "\n")
+                f.write("INFORMACIÓN DE LA SESIÓN DE PROCESAMIENTO\n")
+                f.write("="*60 + "\n\n")
+                
+                # Información del video
+                f.write("--- INFORMACIÓN DEL VIDEO ---\n")
+                f.write(f"Archivo: {os.path.basename(self.config.NOM_VID)}\n")
+                f.write(f"Ruta completa: {self.config.NOM_VID}\n")
+                f.write(f"Formato: {os.path.splitext(self.config.NOM_VID)[1].upper()}\n")
+                f.write(f"Fotogramas totales: {self.total_frames}\n")
+                f.write(f"Fotogramas procesados: {self.frames_procesados}\n")
+                f.write(f"Frame inicial: {self.config.START_FRAME}\n")
+                f.write(f"Skip rate: {self.config.SKIP_RATE}\n\n")
+                
+                # Información del sistema
+                f.write("--- INFORMACIÓN DEL EQUIPO ---\n")
+                f.write(f"Sistema operativo: {platform.system()} {platform.release()}\n")
+                f.write(f"Procesador: {platform.processor()}\n")
+                f.write(f"Arquitectura: {platform.machine()}\n")
+                f.write(f"Python: {platform.python_version()}\n")
+                try:
+                    import cv2
+                    f.write(f"OpenCV: {cv2.__version__}\n")
+                except:
+                    pass
+                f.write("\n")
+                
+                # Información de la sesión
+                f.write("--- INFORMACIÓN DE LA SESIÓN ---\n")
+                f.write(f"Inicio: {self.session_start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Fin: {session_end_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Duración: {duracion_sesion:.2f} segundos ({duracion_sesion/60:.2f} minutos)\n")
+                f.write(f"FPS promedio: {self.fps_average:.2f}\n\n")
+                
+                # Configuración de tracking
+                f.write("--- CONFIGURACIÓN DE TRACKING ---\n")
+                f.write(f"Sistema de capturas: {self.config.SISTEMA_CAPTURAS_AUTO}\n")
+                f.write(f"YOLO tracking: {'Activado' if self.config.YOLO_TRACKING_ENABLED else 'Desactivado'}\n")
+                f.write(f"Profundidad estéreo: {'Activado' if self.config.PROFUNDIDAD_ESTEREO else 'Desactivado'}\n")
+                f.write(f"Vector supervivencia: {'Visible' if self.config.MOSTRAR_VECTOR_SUPERVIVENCIA else 'Oculto'}\n")
+                f.write(f"Vector YOLO: {'Visible' if self.config.MOSTRAR_VECTOR_YOLO else 'Oculto'}\n\n")
+                
+                # Estadísticas de odometría
+                f.write("--- ESTADÍSTICAS DE ODOMETRÍA ---\n")
+                yolo_pos = self.visual_odometry.get_position()
+                f.write(f"Posición final YOLO: ({yolo_pos[0]:.2f}, {yolo_pos[1]:.2f}) cm\n")
+                f.write(f"Posición final Supervivencia: ({self.pos_supervivencia_x:.2f}, {self.pos_supervivencia_y:.2f}) cm\n")
+                f.write(f"Trayectoria YOLO: {len(self.visual_odometry.get_trajectory())} puntos\n")
+                f.write(f"Trayectoria Supervivencia: {len(self.trajectory_supervivencia)} puntos\n\n")
+                
+                # Estadísticas de marcadores
+                f.write("--- ESTADÍSTICAS DE MARCADORES ---\n")
+                f.write(f"Marcadores detectados (Borde): {self.marcador_counter}\n")
+                f.write(f"Nudos detectados: {self.nudo_counter}\n")
+                f.write(f"Total marcadores YOLO: {len(self.yolo_markers)}\n")
+                f.write(f"Mediciones de distancia: {len(self.mediciones_marcadores)}\n")
+                if self.mediciones_marcadores:
+                    f.write(f"Algoritmo ganador: {self.mejor_algoritmo}\n")
+                f.write("\n")
+                
+                # Estadísticas de captura
+                f.write("--- ESTADÍSTICAS DE CAPTURA ---\n")
+                f.write(f"Celdas capturadas: {len(self.hist_celdas_vis)}\n")
+                f.write(f"Tamaño de grilla: 50.0 cm\n")
+                if self.hist_celdas_vis:
+                    depths = [depth for (depth, _) in self.hist_celdas_vis.values()]
+                    f.write(f"Profundidad promedio: {sum(depths)/len(depths):.2f} cm\n")
+                    f.write(f"Profundidad mínima: {min(depths):.2f} cm\n")
+                    f.write(f"Profundidad máxima: {max(depths):.2f} cm\n")
+                f.write("\n")
+                
+                f.write("="*60 + "\n")
+                f.write("FIN DEL REPORTE\n")
+                f.write("="*60 + "\n")
+            
+            print(f"✓ Información de sesión guardada en {info_path}")
+            
+            # 2. GUARDAR MATRICES DE ODOMETRÍA (JSON)
             if self.matrices_yolo:
-                with open(self.config.OUTPUT_JSON_YOLO, 'w') as f:
-                    json.dump(self.matrices_yolo, f)
-                print(f"✓ Guardados {len(self.matrices_yolo)} frames YOLO en {self.config.OUTPUT_JSON_YOLO}")
-            else:
-                print(f" No hay datos YOLO para guardar")
+                json_yolo_path = os.path.join(self.session_folder, 'odometria_yolo.json')
+                with open(json_yolo_path, 'w') as f:
+                    json.dump(self.matrices_yolo, f, indent=2)
+                print(f"✓ Guardados {len(self.matrices_yolo)} frames YOLO en {json_yolo_path}")
             
             if self.matrices_supervivencia:
-                with open(self.config.OUTPUT_JSON_SUPERVIVENCIA, 'w') as f:
-                    json.dump(self.matrices_supervivencia, f)
-                print(f"✓ Guardados {len(self.matrices_supervivencia)} frames Supervivencia en {self.config.OUTPUT_JSON_SUPERVIVENCIA}")
-            else:
-                print(f" No hay datos de Supervivencia para guardar")
-                # Guardar array vacío para que el archivo exista
-                with open(self.config.OUTPUT_JSON_SUPERVIVENCIA, 'w') as f:
-                    json.dump([], f)
-                print(f"  (Archivo vacío creado: {self.config.OUTPUT_JSON_SUPERVIVENCIA})")
+                json_superv_path = os.path.join(self.session_folder, 'odometria_supervivencia.json')
+                with open(json_superv_path, 'w') as f:
+                    json.dump(self.matrices_supervivencia, f, indent=2)
+                print(f"✓ Guardados {len(self.matrices_supervivencia)} frames Supervivencia en {json_superv_path}")
+            
+            # 3. GUARDAR MEDICIONES DE MARCADORES (CSV)
+            if self.mediciones_marcadores:
+                csv_path = os.path.join(self.session_folder, 'mediciones_marcadores.csv')
+                with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+                    fieldnames = ['timestamp', 'marcador_desde', 'marcador_hasta', 
+                                'distancia_real_cm', 'distancia_yolo_cm', 'error_yolo_cm',
+                                'distancia_supervivencia_cm', 'error_supervivencia_cm',
+                                'mejor_algoritmo', 'sistema_capturas_usado']
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(self.mediciones_marcadores)
+                print(f"✓ Guardadas {len(self.mediciones_marcadores)} mediciones en {csv_path}")
+            
+            # 4. GUARDAR IMÁGENES CAPTURADAS
+            if self.hist_celdas_vis:
+                images_dir = os.path.join(self.session_folder, 'capturas')
+                os.makedirs(images_dir, exist_ok=True)
+                
+                for (grid_x, grid_y), (depth, image) in self.hist_celdas_vis.items():
+                    img_filename = f'celda_x{grid_x}_y{grid_y}_depth{depth:.1f}cm.png'
+                    img_path = os.path.join(images_dir, img_filename)
+                    cv2.imwrite(img_path, image)
+                
+                print(f"✓ Guardadas {len(self.hist_celdas_vis)} imágenes en {images_dir}")
+            
+            print(f"\n{'='*60}")
+            print(f"✅ TODOS LOS DATOS GUARDADOS EN: {self.session_folder}")
+            print(f"{'='*60}\n")
+                
         except Exception as e:
             import traceback
             print(f" Error guardando tracking data: {e}")
@@ -133,6 +263,8 @@ class ProcesadorEstereoThread(threading.Thread):
         self.yolo_markers = []  # Limpiar marcadores
         self.marcador_counter = 0
         self.nudo_counter = 0
+        self.ultimo_marcador_pos_yolo = None
+        self.ultimo_marcador_pos_superv = None
         self.ids_marcadores_procesados = set()
         self.marcadores_contados = 0
         self.distancia_real_acumulada = 0.0
@@ -258,6 +390,9 @@ class ProcesadorEstereoThread(threading.Thread):
 
                 frame_left = frame[:, :w//2]
                 
+                # IDs de marcadores duplicados (compartido entre detección y medición)
+                ids_duplicados_ignorados = set()
+                
                 # Tracking YOLO en vista izquierda ANTES de damage detector
                 if self.config.YOLO_TRACKING_ENABLED:
                     frame_left_for_yolo = frame_left.copy()
@@ -273,8 +408,6 @@ class ProcesadorEstereoThread(threading.Thread):
                     mat_yolo[1, 3] = -yolo_pos[1] / 100.0
                     mat_yolo[2, 3] = 0.0
                     self.matrices_yolo.append(mat_yolo.tolist())
-                    
-                    # Procesar marcadores inmediatamente (Bordes y Nudos)
                     for det in detections:
                         if det['crossed_center']:  # Ambas clases: 0=marcador, 1=Nudo
                             # Usar la longitud actual de la trayectoria como índice
@@ -293,7 +426,8 @@ class ProcesadorEstereoThread(threading.Thread):
                                     
                                     if dist < self.marker_proximity_threshold:
                                         is_duplicate = True
-                                        print(f"⚠️ Marcador duplicado ignorado: {det['name']} a {dist:.1f}cm del marcador {existing_marker['marker_id']}")
+                                        ids_duplicados_ignorados.add(det['id'])  # Marcar como duplicado
+                                        print(f"Marcador duplicado ignorado: {det['name']} a {dist:.1f}cm del marcador {existing_marker['marker_id']}")
                                         break
                             
                             if not is_duplicate:
@@ -340,25 +474,99 @@ class ProcesadorEstereoThread(threading.Thread):
                 for det in detections:
                     if det['class'] == 0 and det['crossed_center']:
                         marker_id = det['id']
+                        # Ignorar si fue marcado como duplicado o ya procesado
+                        if marker_id in ids_duplicados_ignorados:
+                            continue
                         if marker_id not in self.ids_marcadores_procesados:
                             self.marcadores_contados += 1
-                            self.distancia_real_acumulada += 100.0
                             self.ids_marcadores_procesados.add(marker_id)
-
-                            diff_puntos = abs(self.distancia_real_acumulada - self.distancia_puntos_actual)
-                            diff_yolo = abs(self.distancia_real_acumulada - self.distancia_yolo_actual)
-                            if diff_yolo < diff_puntos:
-                                self.mejor_algoritmo = "YOLO"
-                                self.color_ganador = "#00FF00"
-                            elif diff_puntos < diff_yolo:
-                                self.mejor_algoritmo = "Puntos"
-                                self.color_ganador = "#FFFF00"
+                            
+                            # Obtener posiciones actuales
+                            pos_yolo_actual = yolo_pos if self.config.YOLO_TRACKING_ENABLED else (0.0, 0.0)
+                            pos_superv_actual = (self.pos_supervivencia_x, self.pos_supervivencia_y)
+                            
+                            # Si es el PRIMER marcador, solo guardamos la posición de referencia
+                            if self.marcadores_contados == 1:
+                                self.ultimo_marcador_pos_yolo = pos_yolo_actual
+                                self.ultimo_marcador_pos_superv = pos_superv_actual
+                                print(f"\nMarcador {self.marcadores_contados} (INICIO): Posiciones guardadas como referencia")
+                                print(f"   YOLO: ({pos_yolo_actual[0]:.1f}, {pos_yolo_actual[1]:.1f}) cm")
+                                print(f"   Superv: ({pos_superv_actual[0]:.1f}, {pos_superv_actual[1]:.1f}) cm")
                             else:
-                                self.mejor_algoritmo = "Empate"
-                                self.color_ganador = "#FFFFFF"
-                            print(f"Marcador detectado: Real={self.distancia_real_acumulada:.1f} cm, Puntos={self.distancia_puntos_actual:.1f} cm, YOLO={self.distancia_yolo_actual:.1f} cm -> Mejor: {self.mejor_algoritmo}")
+                                # A partir del SEGUNDO marcador, calculamos distancia desde el anterior
+                                distancia_real = 100.0  # 1 metro entre marcadores
+                                
+                                # Calcular distancia recorrida por YOLO desde último marcador
+                                if self.ultimo_marcador_pos_yolo:
+                                    delta_yolo = math.hypot(
+                                        pos_yolo_actual[0] - self.ultimo_marcador_pos_yolo[0],
+                                        pos_yolo_actual[1] - self.ultimo_marcador_pos_yolo[1]
+                                    )
+                                else:
+                                    delta_yolo = 0.0
+                                
+                                # Calcular distancia recorrida por Supervivencia desde último marcador
+                                if self.ultimo_marcador_pos_superv:
+                                    delta_superv = math.hypot(
+                                        pos_superv_actual[0] - self.ultimo_marcador_pos_superv[0],
+                                        pos_superv_actual[1] - self.ultimo_marcador_pos_superv[1]
+                                    )
+                                else:
+                                    delta_superv = 0.0
+                                
+                                # Calcular errores
+                                error_yolo = abs(distancia_real - delta_yolo)
+                                error_superv = abs(distancia_real - delta_superv)
+                                
+                                # Determinar cuál es mejor
+                                if error_yolo < error_superv:
+                                    self.mejor_algoritmo = "YOLO"
+                                    self.color_ganador = "#00FF00"
+                                elif error_superv < error_yolo:
+                                    self.mejor_algoritmo = "Supervivencia"
+                                    self.color_ganador = "#FFFF00"
+                                else:
+                                    self.mejor_algoritmo = "Empate"
+                                    self.color_ganador = "#FFFFFF"
+                                
+                                # Elegir sistema usado según configuración
+                                if self.config.SISTEMA_CAPTURAS_AUTO == 'supervivencia':
+                                    sistema_usado = "Supervivencia"
+                                else:
+                                    sistema_usado = "YOLO"
+                                
+                                # Mostrar resultados
+                                print(f"\nMarcador {self.marcadores_contados-1} -> {self.marcadores_contados}:")
+                                print(f"   Real:         {distancia_real:.1f} cm")
+                                print(f"   YOLO:         {delta_yolo:.1f} cm (error: {error_yolo:.1f} cm)")
+                                print(f"   Supervivencia: {delta_superv:.1f} cm (error: {error_superv:.1f} cm)")
+                                print(f"   Mejor: {self.mejor_algoritmo} | Sistema capturas: {sistema_usado}")
+                                
+                                # Guardar medición en la lista para CSV
+                                medicion = {
+                                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                    'marcador_desde': self.marcadores_contados - 1,
+                                    'marcador_hasta': self.marcadores_contados,
+                                    'distancia_real_cm': round(distancia_real, 2),
+                                    'distancia_yolo_cm': round(delta_yolo, 2),
+                                    'error_yolo_cm': round(error_yolo, 2),
+                                    'distancia_supervivencia_cm': round(delta_superv, 2),
+                                    'error_supervivencia_cm': round(error_superv, 2),
+                                    'mejor_algoritmo': self.mejor_algoritmo,
+                                    'sistema_capturas_usado': sistema_usado
+                                }
+                                self.mediciones_marcadores.append(medicion)
+                                
+                                # Actualizar posiciones de referencia para el próximo marcador
+                                self.ultimo_marcador_pos_yolo = pos_yolo_actual
+                                self.ultimo_marcador_pos_superv = pos_superv_actual
 
                 dib_ayu(frame_top, w, h, q_w, q_h, self.config)
+                
+                # IMPORTANTE: Capturar imagen cruda ANTES de dibujar vectores
+                # Usar el frame original sin procesar del lado izquierdo
+                frame_left_raw = frame[:, :w//2].copy()
+                
                 del_p_x, del_p_y, vista_actual_limpia = dib_mov(frame_top, objs, w, h, depth_cm, self.config, self.config.MOSTRAR_VECTOR_SUPERVIVENCIA)
                 dib_escala_profundidad(frame_top, w, h, self.config)
                 
@@ -436,15 +644,26 @@ class ProcesadorEstereoThread(threading.Thread):
                     rect_sz_cm_actual = rect_sz_cm_actual / self.config.Q_X
                     rect_sz_cm_actual = np.clip(rect_sz_cm_actual, 10.0, 100.0)
 
-                    grid_x = round(pos_m_x / self.config.FIXED_GRID_SIZE_CM)
-                    grid_y = round(pos_m_y / self.config.FIXED_GRID_SIZE_CM)
+                    # Determinar qué posición usar según configuración
+                    if self.config.SISTEMA_CAPTURAS_AUTO == 'yolo':
+                        capture_pos_x = yolo_pos[0]
+                        capture_pos_y = yolo_pos[1]
+                    else:
+                        capture_pos_x = pos_m_x
+                        capture_pos_y = pos_m_y
+                    
+                    # Usar grid más pequeño para capturas más frecuentes (50cm en lugar de FIXED_GRID_SIZE_CM)
+                    capture_grid_size = 50.0  # cm
+                    grid_x = round(capture_pos_x / capture_grid_size)
+                    grid_y = round(capture_pos_y / capture_grid_size)
                     celda_id = (grid_x, grid_y)
-                    normalized_view = normalize_cell_view(vista_actual_limpia.copy(), cell_target_size=(100, 100))
-
-                    if celda_id not in self.hist_celdas_vis or depth_cm < self.hist_celdas_vis[celda_id][0]:
-                        existing_image = self.hist_celdas_vis.get(celda_id, (None, None))[1]
-                        registered_image = register_image_to_map(normalized_view, existing_image)
-                        self.hist_celdas_vis[celda_id] = (depth_cm, registered_image)
+                    
+                    # Capturar solo si la celda está vacía (intentando no dejar huecos)
+                    if celda_id not in self.hist_celdas_vis:
+                        # Guardar imagen cruda completa de alta calidad (sin normalizar)
+                        self.hist_celdas_vis[celda_id] = (depth_cm, frame_left_raw.copy())
+                        sistema_usado = "YOLO" if self.config.SISTEMA_CAPTURAS_AUTO == 'yolo' else "Supervivencia"
+                        print(f"Captura en celda ({grid_x}, {grid_y}) con {sistema_usado}: pos=({capture_pos_x:.1f}, {capture_pos_y:.1f}) cm")
 
                 cns_filt_left_eye = cns_filt[:, :w // 2]
                 map_display_w = 400
@@ -454,8 +673,16 @@ class ProcesadorEstereoThread(threading.Thread):
 
                 self.last_map_radar = map_radar
 
+                # Determinar qué posición mostrar en el mapa según sistema de capturas
+                if self.config.SISTEMA_CAPTURAS_AUTO == 'yolo':
+                    display_pos_x = yolo_pos[0]
+                    display_pos_y = yolo_pos[1]
+                else:
+                    display_pos_x = pos_m_x
+                    display_pos_y = pos_m_y
+                
                 canv_m = dib_map(
-                    self.hist_celdas_vis, pos_m_x, pos_m_y, self.config.FIXED_GRID_SIZE_CM,
+                    self.hist_celdas_vis, display_pos_x, display_pos_y, self.config.FIXED_GRID_SIZE_CM,
                     rect_sz_cm_actual, map_display_w, map_display_h,
                     self.config.FIXED_GRID_SIZE_CM, self.config.FIXED_GRID_SIZE_CM, self.config
                 )
@@ -486,7 +713,7 @@ class ProcesadorEstereoThread(threading.Thread):
                 draw_text_with_shadow(frame_top, fps_text_avg, (10, 65), 
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
                 
-                self.gui_ref.root.after(0, self.gui_ref.actualizar_gui, frame_top, cns_filt_left_eye, canv_m, map_radar, odometry_graph, depth_cm, pos_m_x, pos_m_y, self.mapeo.global_angle, self.current_frame, self.total_frames)
+                self.gui_ref.root.after(0, self.gui_ref.actualizar_gui, frame_top, cns_filt_left_eye, canv_m, map_radar, odometry_graph, depth_cm, display_pos_x, display_pos_y, self.mapeo.global_angle, self.current_frame, self.total_frames)
             
             # IMPORTANTE: Guardar matrices en CADA frame para trazado 3D completo
             # (Fuera del if SKIP_RATE para garantizar continuidad)
@@ -517,6 +744,7 @@ class ProcesadorEstereoThread(threading.Thread):
 
             frame_counter += 1
             self.current_frame = self.config.START_FRAME + frame_counter
+            self.frames_procesados = frame_counter  # Actualizar contador de frames procesados
 
             # Verificar si debemos detenernos antes de sleep
             if not self._running or self._stop_event.is_set():
@@ -586,6 +814,7 @@ class StereoAppTkinter:
         self.var_vista_mono = tk.BooleanVar(value=self.config.VISTA_MONO)
         self.var_mostrar_vector_supervivencia = tk.BooleanVar(value=self.config.MOSTRAR_VECTOR_SUPERVIVENCIA)
         self.var_mostrar_vector_yolo = tk.BooleanVar(value=self.config.MOSTRAR_VECTOR_YOLO)
+        self.var_capturas_yolo = tk.BooleanVar(value=(self.config.SISTEMA_CAPTURAS_AUTO == 'yolo'))
 
         # Configurar cierre correcto de la aplicación
         self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
@@ -783,7 +1012,7 @@ class StereoAppTkinter:
 
         self._create_control_panel(control_col_frame).grid(row=2, column=0, sticky="ew", padx=5, pady=5)
 
-        ttk.Button(control_col_frame, text=" Terminar Ejecución", command=self.on_closing, style='Danger.TButton').grid(row=3, column=0, sticky="ew", padx=5, pady=5)
+        ttk.Button(control_col_frame, text=" Terminar Ejecución", command=self.terminar_ejecucion, style='Danger.TButton').grid(row=3, column=0, sticky="ew", padx=5, pady=5)
 
         # Botón para cambiar el video
         ttk.Button(control_col_frame, text="🔄 Cambiar Video", command=self.change_video).grid(row=4, column=0, sticky="ew", padx=5, pady=5)
@@ -813,6 +1042,14 @@ class StereoAppTkinter:
         
         ttk.Label(switch_frame2, text="Vector YOLO:").pack(side="left", padx=(20, 0))
         ttk.Checkbutton(switch_frame2, variable=self.var_mostrar_vector_yolo, command=self._update_switches, style='TCheckbutton').pack(side="left", padx=5)
+        
+        # Tercera fila: Sistema de capturas automáticas
+        switch_frame3 = ttk.Frame(group)
+        switch_frame3.pack(fill='x', pady=5)
+        
+        ttk.Label(switch_frame3, text="Capturas con YOLO:").pack(side="left", padx=(10, 0))
+        ttk.Checkbutton(switch_frame3, variable=self.var_capturas_yolo, command=self._update_switches, style='TCheckbutton').pack(side="left", padx=5)
+        ttk.Label(switch_frame3, text="(desmarcar para usar Supervivencia)", foreground="gray").pack(side="left", padx=(5, 0))
 
         self._add_slider(group, "Distancia Umbral (UMB_DIST)", 'UMB_DIST', 10, 200, 5)
         self._add_slider(group, "Min. Supervivencia (FR)", 'MIN_SUPERVIVENCIA_FR', 1, 60, 1)
@@ -834,6 +1071,7 @@ class StereoAppTkinter:
         self.config.VISTA_MONO = self.var_vista_mono.get()
         self.config.MOSTRAR_VECTOR_SUPERVIVENCIA = self.var_mostrar_vector_supervivencia.get()
         self.config.MOSTRAR_VECTOR_YOLO = self.var_mostrar_vector_yolo.get()
+        self.config.SISTEMA_CAPTURAS_AUTO = 'yolo' if self.var_capturas_yolo.get() else 'supervivencia'
 
     def _add_slider(self, parent, text, param_key, min_val, max_val, step):
         frame = ttk.Frame(parent)
@@ -1202,8 +1440,28 @@ class StereoAppTkinter:
             self.timeline_label.config(text=f"Frame: {current_frame}")
             self.progress_bar['value'] = 0
 
+    def terminar_ejecucion(self):
+        """Detiene el thread y guarda todos los datos (reportes, mediciones, imágenes)"""
+        print("\n" + "="*60)
+        print("FINALIZANDO EJECUCIÓN Y GUARDANDO DATOS...")
+        print("="*60)
+        
+        if self.thread and self.thread.is_alive():
+            self.thread.stop()
+            self.thread.join(timeout=5.0)
+        
+        print("✅ Ejecución finalizada y datos guardados correctamente")
+        print("="*60 + "\n")
+        
+        messagebox.showinfo("Finalizado", 
+                          "Ejecución terminada.\n\n"
+                          "✅ Matrices de odometría guardadas\n"
+                          "✅ Mediciones de marcadores guardadas (CSV)\n"
+                          "✅ Imágenes capturadas guardadas\n\n"
+                          "Revisa la consola para más detalles.")
 
     def on_closing(self):
+        """Cierra la aplicación después de guardar todos los datos"""
         if self.thread and self.thread.is_alive():
             self.thread.stop()
             self.thread.join()
@@ -1243,18 +1501,22 @@ class StereoAppTkinter:
             messagebox.showwarning("Aviso", "No hay procesamiento activo.")
             return
 
+        # Usar la carpeta de sesión del thread
+        session_folder = self.thread.session_folder
+        
         nombre_archivo = os.path.basename(self.config.NOM_VID)  
         nombre_limpio = os.path.splitext(nombre_archivo)[0]     
         
         timestamp = time.strftime("%Y%m%d-%H%M%S")
-        
         nombre_base = f"Reporte_{nombre_limpio}_{timestamp}"
 
+        # Guardar mapa en la carpeta de sesión
         if self.thread.last_map_radar is not None:
-            nombre_img = f"{nombre_base}_MAPA.png"
+            nombre_img = os.path.join(session_folder, f"{nombre_base}_MAPA.png")
             cv2.imwrite(nombre_img, self.thread.last_map_radar)
         
-        nombre_csv = f"{nombre_base}_DAÑOS.csv"
+        # Guardar CSV de daños en la carpeta de sesión
+        nombre_csv = os.path.join(session_folder, f"{nombre_base}_DAÑOS.csv")
         try:
             with open(nombre_csv, "w", encoding="utf-8") as f:
                 f.write("ID_Daño;Frame;X_Global_cm;Y_Global_cm;Area_px\n")
@@ -1272,7 +1534,9 @@ class StereoAppTkinter:
                     area_str = f"{area:.2f}".replace('.', ',')
                     f.write(f"{id_d};{fr};{gx_str};{gy_str};{area_str}\n")
             
-            messagebox.showinfo("Éxito", f"Reporte guardado:\n{nombre_img}\n{nombre_csv}")
+            messagebox.showinfo("Éxito", 
+                              f"Reporte guardado en:\n{session_folder}\n\n"
+                              f"Archivos:\n- {os.path.basename(nombre_img)}\n- {os.path.basename(nombre_csv)}")
             
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar el reporte: {str(e)}")

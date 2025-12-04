@@ -91,6 +91,9 @@ class ConfiguracionGlobal:
         self.MOSTRAR_VECTOR_SUPERVIVENCIA = True
         self.MOSTRAR_VECTOR_YOLO = True
         
+        # Configuración de capturas automáticas: 'yolo' o 'supervivencia'
+        self.SISTEMA_CAPTURAS_AUTO = 'yolo'  # Usar YOLO por defecto para capturas
+        
         # Configuración de exportación de datos
         self.OUTPUT_JSON_YOLO = "odometria_yolo.json"
         self.OUTPUT_JSON_SUPERVIVENCIA = "odometria_supervivencia.json"

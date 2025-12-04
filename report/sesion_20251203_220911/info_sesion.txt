@@ -1,0 +1,29 @@
+============================================================
+INFORMACIÓN DE LA SESIÓN DE PROCESAMIENTO
+============================================================
+
+--- INFORMACIÓN DEL VIDEO ---
+Archivo: 2025_09_25_12_42_28.svo
+Ruta completa: C:/Users/yohan/Downloads/2025_09_25_12_42_28.svo
+Formato: .SVO
+Fotogramas totales: 2685
+Fotogramas procesados: 276
+Frame inicial: 0
+Skip rate: 1
+
+--- INFORMACIÓN DEL EQUIPO ---
+Sistema operativo: Windows 10
+Procesador: Intel64 Family 6 Model 158 Stepping 10, GenuineIntel
+Arquitectura: AMD64
+Python: 3.9.25
+OpenCV: 4.12.0
+
+--- INFORMACIÓN DE LA SESIÓN ---
+Inicio: 2025-12-03 22:09:11
+Fin: 2025-12-03 22:11:44
+Duración: 152.68 segundos (2.54 minutos)
+FPS promedio: 1.70
+
+--- CONFIGURACIÓN DE TRACKING ---
+Sistema de capturas: yolo
+YOLO tracking: Activado

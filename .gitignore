@@ -8,7 +8,7 @@ ENV/
 __pycache__/
 *.py[cod]
 *$py.class
-
+img/capturas*
 # Distribution / packaging
 build/
 dist/

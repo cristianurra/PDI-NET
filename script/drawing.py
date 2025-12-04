@@ -184,7 +184,7 @@ def dib_map(
         rect_size_px = int((rect_size_cm - config.RECT_MARGIN_CM) * esc_m)
 
         map_center_x = int(off_x + cell_center_x * esc_m)
-        map_center_y = int(off_y - cell_center_y * esc_m)
+        map_center_y = int(off_y - cell_center_y * esc_m)  # Invertir Y para el mapa
 
         half_size_px = rect_size_px // 2
         y1 = map_center_y - half_size_px
@@ -210,7 +210,7 @@ def dib_map(
                 cv2.rectangle(canv_m, (x1, y1), (x2, y2), fail_color, -1)
 
     cur_x = int(off_x + pos_m_x * esc_m)
-    cur_y = int(off_y - pos_m_y * esc_m)
+    cur_y = int(off_y - pos_m_y * esc_m)  # Invertir Y para el mapa
 
     VIEW_RECT_SIZE_CM = fixed_grid_sz_cm * 0.9
 
