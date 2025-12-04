@@ -10,7 +10,7 @@
 
 ## Ejecución en windows
 ```bash
-python main.py -v "C:<ruta_al_video>" -sf 500
+python main.py
 ```
 ## Ejecución en Linux 
 ```bash
