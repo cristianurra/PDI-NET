@@ -2,15 +2,15 @@
 
 Integrantes:
 
-Daniela Stuven
+* Daniela Stuven
 
-Yohanns Jara
+* Yohanns Jara
 
-Iván Montiel
+* Iván Montiel
 
-Juan Villalón
+* Juan Villalón
 
-Cristhian Urra
+* Cristhian Urra
 
 
 ## 🎥 Demo
