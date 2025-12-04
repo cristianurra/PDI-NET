@@ -57,8 +57,8 @@ Este es el flujo exacto que se ejecuta en cada iteración dentro de `ProcesadorE
 
 #### Resumen visual del flujo actual (2025)
 
-![Imagen binaria](https://github.com/cristianurra/PDI-NET/blob/main/imagenes/threshold.png)
-![Imagen Stereo](https://github.com/cristianurra/PDI-NET/blob/main/imagenes/stereo.png)
+![Imagen binaria](https://github.com/cristianurra/PDI-NET/blob/main/img/threshold.png)
+![Imagen Stereo](https://github.com/cristianurra/PDI-NET/blob/main/img/stereo.png)
 
 ### III. Cierre (Fin de Ejecución)
 
