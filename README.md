@@ -417,6 +417,72 @@ dib_vector_yolo(frame_mono, ..., vx_yolo, vy_yolo)     # odometría YOLO
 map_img = dib_map(hist_celdas, pos_x, pos_y, ...)      # mapa acumulado
 
 
+### 6. `gui.py` (Interfáz gráfica)
+Módulo principal de la **interfaz gráfica de usuario (GUI)** basada en Tkinter para el procesamiento en tiempo real de videos estéreo (SVO/MP4). Integra todos los componentes del pipeline (stereo_processing, tracker, mapper, anomaly_detector, yolo_tracker, visual_odometry) en un thread separado para no bloquear la interfaz.
+
+#### Clases principales
+
+1. **ProcesadorEstereoThread** (hereda de `threading.Thread`)  
+   Thread dedicado al procesamiento intensivo del video. Maneja el loop principal de frames, actualizaciones de trackers y mapeo.
+
+   **Atributos clave**:
+   - `config`: Instancia de `ConfiguracionGlobal` (parámetros compartidos).
+   - `mapeo`: `GlobalMapper2D` para odometría y mapeo 2D.
+   - `hist_celdas_vis`: Diccionario de celdas visitadas (profundidad + imagen).
+   - `tracked_objects_history`: Historial de objetos para cálculos.
+   - `damage_detector`: `DamageDetector` para anomalías.
+   - `yolo_tracker`: `YOLOTracker` para detección/seguimiento YOLO.
+   - `visual_odometry`: `VisualOdometry` para estimación de movimiento.
+   - `odometry_drawer`: `AdaptiveTrajectoryDrawer` para graficar trayectoria.
+   - Posiciones y trayectorias para métodos "supervivencia" y YOLO.
+   - Matrices de transformación 4x4 para exportación (Open3D).
+   - Contadores para FPS, progreso, marcadores detectados, distancias.
+
+   **Métodos principales**:
+   | Método                  | Descripción                                                                 |
+   |-------------------------|-----------------------------------------------------------------------------|
+   | `stop()`                | Detiene el thread y guarda datos de tracking en JSON.                       |
+   | `_save_tracking_data()` | Exporta matrices YOLO/supervivencia a JSON (incluso si vacías).             |
+   | `pause()` / `resume()`  | Controla pausado del procesamiento.                                         |
+   | `run()`                 | Loop principal: carga video, procesa frames, actualiza trackers/mapeo, calcula FPS, detecta daños/marcadores, guarda matrices. Usa mediana para robustez. Maneja modo mono/stereo. |
+   | `actualizar_gui()`      | Actualiza elementos Tkinter con frames procesados (video, máscara, mapa, radar, odometría, labels de profundidad/posición/ángulo/progreso). |
+
+   **Notas de implementación**:
+   - Soporte CUDA si disponible.
+   - Procesamiento por frames: segmentación, matching estéreo, tracking (supervivencia + YOLO), detección de daños/marcadores naranja.
+   - Actualización de posición global con `CM_POR_PX`.
+   - Cálculo de "mejor algoritmo" basado en precisión de distancia vs. real (contando marcadores).
+   - Limpieza de datos al inicio (JSON vacíos).
+   - Dibujo de ayudas (rejilla, vectores, escala profundidad) usando `drawing.py`.
+
+2. **GUIEstereo** (clase principal de la GUI, parcialmente truncada en el código)  
+   Maneja la ventana Tkinter con paneles para video, máscara, mapas, controles.
+
+   **Elementos UI clave** (basado en métodos):
+   - Labels para video, máscara, mapa posición, mapa radar, odometría, profundidad, posición, ángulo, timeline.
+   - Barra de progreso para frames.
+   - Botones: cambiar video, guardar reporte (CSV de daños + imagen mapa), visualizar mapa 3D (con Open3D).
+   - Soporte para modo mono/stereo (`VISTA_MONO`).
+
+   **Métodos principales**:
+   | Método                  | Descripción                                                                 |
+   |-------------------------|-----------------------------------------------------------------------------|
+   | `on_closing()`          | Detiene thread y cierra ventana.                                            |
+   | `change_video()`        | Pausa thread, selecciona nuevo video, reinicia procesamiento.               |
+   | `guardar_reporte()`     | Guarda CSV de daños (ID, frame, posición global, área) + PNG de mapa radar. |
+   | `visualizar_mapa_3d()`  | Thread separado para renderizar trayectorias/marcadores en Open3D (líneas con cilindros, esferas, colores por método). Maneja datos truncados. |
+
+#### Detalles generales de implementación
+- **Multithreading**: Procesamiento en background para UI responsiva.
+- **Visualización**: Resize adaptativo con PIL/ImageTk. Texto con sombra para mejor legibilidad.
+- **Exportación**: JSON para odometría (YOLO/supervivencia), CSV para daños.
+- **Robustez**: Manejo de errores (e.g., video inválido, Open3D no instalado), limpieza de datos al inicio.
+- **Optimizaciones**: FPS promedio (últimos 30 frames), filtrado de objetos estáticos/outliers.
+- **Dependencias**: OpenCV, NumPy, Tkinter, PIL, threading, json.
+
+**Uso típico**: Inicia GUI, carga video, procesa en thread, actualiza UI en tiempo real. Ideal para monitoreo interactivo de robótica/visión estéreo con tracking y mapeo.
+
+
 ### 6. `main.py` (Bucle Principal)
 
 ### 7. `corrección` (Video de Entrada Recodificado)
