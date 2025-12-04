@@ -15,7 +15,7 @@ Integrantes:
 
 ## 🎥 Demo
 
-[![Video Demo](https://img.youtube.com/vi/X3mn275QVqc/maxresdefault.jpg)](https://youtu.be/X3mn275QVqc)
+[![Video Demo](https://img.youtube.com/vi/X3mn275QVqc/maxresdefault.jpg)](https://youtu.be/lYZgcfvQBi8)
 
 ---
 ![Interfaz](https://github.com/cristianurra/PDI-NET/blob/main/capturaa.png)
