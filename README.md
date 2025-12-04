@@ -483,6 +483,36 @@ Módulo principal de la **interfaz gráfica de usuario (GUI)** basada en Tkinter
 **Uso típico**: Inicia GUI, carga video, procesa en thread, actualiza UI en tiempo real. Ideal para monitoreo interactivo de robótica/visión estéreo con tracking y mapeo.
 
 
+### 7. `yolo_tracker.py`
+
+Módulo encargado del **seguimiento de objetos con YOLOv11 + BoT-SORT**, especialmente optimizado para detectar y rastrear **bordes y nudos** en estructuras tipo malla/red.
+
+#### Clase principal: `YOLOTracker`
+
+**Responsabilidades**:
+- Carga y ejecución del modelo YOLO entrenado (`best.pt`).
+- Tracking persistente con **BoT-SORT** (`botsort.yaml`).
+- Cálculo de vectores de movimiento entre frames.
+- Detección de **cruces del tercio central horizontal** 
+
+**Características clave**:
+
+| Funcionalidad                         | Detalle                                                                 |
+|---------------------------------------|-------------------------------------------------------------------------|
+| Modelo                                | `ultralytics.YOLO` (v11 o compatible)                                   |
+| Clases rastreadas                     | Solo `0` (Borde) y `1` (Nudo)                                           |
+| Tracker                               | BoT-SORT (mejor que ByteTrack en entornos con oclusión)                 |
+| Aceleración                           | CUDA automático si `torch.cuda.is_available()`                          |
+| Selección de objetos                  | Top-10 más cercanos al centro de la imagen → más relevantes             |
+| Detección de cruce                    | Se activa cuando un objeto **entra** al tercio central (33%-66%)        |
+| Vectores de movimiento                | `dx = cx_actual - cx_prev`, solo de objetos con historia                |
+| Salida                                | Frame anotado + listas de `vectors_x`, `vectors_y` + lista de detecciones |
+
+**Método principal**: `track_frame(frame)`
+annotated_frame, vectors_x, vectors_y, detections = tracker.track_frame(frame_left)
+
+
+
 ### 6. `main.py` (Bucle Principal)
 
 ### 7. `corrección` (Video de Entrada Recodificado)
