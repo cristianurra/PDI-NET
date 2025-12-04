@@ -1,3 +1,9 @@
+"""
+Módulo de funciones de utilidad para procesamiento estéreo.
+Contiene funciones auxiliares para cálculos geométricos, conversión de colores,
+manejo de archivos SVO y transformaciones de coordenadas.
+"""
+
 import math
 import numpy as np
 import cv2

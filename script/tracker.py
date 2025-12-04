@@ -1,3 +1,8 @@
+"""
+Módulo de tracking de objetos para procesamiento estéreo.
+Maneja el seguimiento temporal de puntos detectados entre frames.
+"""
+
 import numpy as np
 from typing import List, Tuple, Dict, Any
 
@@ -5,7 +10,20 @@ from config import ConfiguracionGlobal
 from utils import dist, depth_to_color
 
 class Tracker:
+    """
+    Clase para tracking de objetos entre frames consecutivos.
+    Mantiene un historial de posiciones, velocidades y profundidad para cada objeto.
+    """
+    
     def __init__(self, max_d: float, len_v: int, config: ConfiguracionGlobal):
+        """
+        Inicializa el tracker de objetos.
+        
+        Args:
+            max_d: Distancia máxima para asociar objetos entre frames (píxeles)
+            len_v: Longitud del historial de velocidades
+            config: Configuración global del sistema
+        """
         self.objs: List[Dict[str, Any]] = []
         self.prox_id = 0
         self.max_d = max_d
@@ -13,10 +31,27 @@ class Tracker:
         self.config = config
 
     def update_config(self, max_d: float, len_v: int):
+        """
+        Actualiza los parámetros de configuración del tracker.
+        
+        Args:
+            max_d: Nueva distancia máxima para asociación
+            len_v: Nueva longitud de historial de velocidades
+        """
         self.max_d = max_d
         self.len_v = len_v
 
     def update_and_get(self, matched_cns_pairs: List[Tuple[Tuple[Tuple[int, int], Tuple[int, int]], int]]) -> List[Dict[str, Any]]:
+        """
+        Actualiza el tracking de objetos con nuevas detecciones.
+        Asocia puntos nuevos con objetos existentes o crea nuevos objetos.
+        
+        Args:
+            matched_cns_pairs: Lista de pares de centroides (izq, der) con disparidad
+        
+        Returns:
+            Lista de objetos trackeados con información actualizada
+        """
         max_d_act = self.max_d
         n_vel_pr_act = self.len_v
 

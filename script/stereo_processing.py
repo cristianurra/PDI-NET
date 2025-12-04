@@ -1,3 +1,9 @@
+"""
+Módulo de procesamiento estéreo para detección y matching de contornos.
+Maneja la segmentación de imágenes, detección de contornos, matching estéreo,
+procesamiento de mallas y detección de marcadores naranjas.
+"""
+
 import cv2
 import numpy as np
 import math
@@ -9,7 +15,12 @@ from config import ConfiguracionGlobal
 _cuda_processor = None
 
 def set_cuda_processor(cuda_proc):
-    """Establece el procesador CUDA para usar en este módulo."""
+    """
+    Establece el procesador CUDA global para usar en este módulo.
+    
+    Args:
+        cuda_proc: Instancia de CUDAProcessor del módulo hardware_optimizer
+    """
     global _cuda_processor
     _cuda_processor = cuda_proc
 

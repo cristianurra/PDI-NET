@@ -1,3 +1,8 @@
+"""
+Módulo de mapeo global 2D para odometría visual.
+Maneja la posición y trayectoria de la cámara en el espacio 2D.
+"""
+
 import numpy as np
 import cv2
 import math
@@ -6,7 +11,20 @@ from typing import List, Tuple, Dict, Any
 from config import ConfiguracionGlobal
 
 class GlobalMapper2D:
+    """
+    Clase para mapeo global 2D de la posición de la cámara.
+    Calcula el movimiento de la cámara basado en el tracking de objetos usando transformaciones afines.
+    """
+    
     def __init__(self, config: ConfiguracionGlobal, center_x: float = 500.0, center_y: float = 500.0):
+        """
+        Inicializa el mapeador global 2D.
+        
+        Args:
+            config: Configuración global del sistema
+            center_x: Posición inicial X en el mapa (píxeles)
+            center_y: Posición inicial Y en el mapa (píxeles)
+        """
         self.map_size = 1000
         self.global_x = center_x
         self.global_y = center_y
@@ -16,6 +34,13 @@ class GlobalMapper2D:
         self.config = config
 
     def update_position(self, tracked_objects: List[Dict[str, Any]]):
+        """
+        Actualiza la posición global de la cámara basado en objetos trackeados.
+        Usa transformación afin (para 3+ puntos) o promedio simple (1-2 puntos).
+        
+        Args:
+            tracked_objects: Lista de objetos trackeados con historia de posiciones
+        """
         # Necesitamos al menos 1 punto con historia para movernos (fallback)
         # O 3 puntos para el cálculo complejo (affine)
         if len(tracked_objects) < 1: return

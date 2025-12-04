@@ -1,16 +1,41 @@
+"""
+Módulo de detección de anomalías y daños en mallas.
+Identifica agujeros y daños en estructuras de malla mediante análisis de imagen.
+"""
+
 import cv2
 import numpy as np
 from typing import List, Dict, Any, Tuple
 from config import ConfiguracionGlobal
 
 class DamageDetector:
+    """
+    Clase para detectar daños y anomalías en mallas.
+    Usa umbralización adaptativa y análisis de componentes conectados.
+    """
+    
     def __init__(self, config: ConfiguracionGlobal):
+        """
+        Inicializa el detector de daños.
+        
+        Args:
+            config: Configuración global del sistema
+        """
         self.config = config
         self.candidates_prev: List[List[Any]] = []
         self.next_id = 1
         self.kernel_morph = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
 
     def detect(self, frame_bgr: np.ndarray) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
+        """
+        Detecta daños en la imagen de una malla.
+        
+        Args:
+            frame_bgr: Imagen BGR de entrada
+        
+        Returns:
+            Tupla de (imagen con anotaciones, lista de daños detectados)
+        """
         height, width = frame_bgr.shape[:2]
         frame_result = frame_bgr.copy()
         confirmed_damages = []

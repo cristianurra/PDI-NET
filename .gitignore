@@ -9,6 +9,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 img/capturas*
+!img/capturaa.png
 # Distribution / packaging
 build/
 dist/
@@ -16,7 +17,7 @@ report/*
 *.egg-info/
 *.egg
 pip-wheel-metadata/
-*.png
+# *.png
 *.jpg
 *.ipynb
 *.json

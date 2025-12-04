@@ -5,7 +5,7 @@
 [![Video Demo](https://img.youtube.com/vi/X3mn275QVqc/maxresdefault.jpg)](https://youtu.be/X3mn275QVqc)
 
 ---
-![Interfaz](https://github.com/cristianurra/PDI-NET/blob/main/imagenes/captura.png)
+![Interfaz](https://github.com/cristianurra/PDI-NET/blob/main/capturaa.png)
 
 
 ## Ejecución en windows

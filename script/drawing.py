@@ -1,3 +1,9 @@
+"""
+Módulo de funciones de visualización y dibujo.
+Contiene funciones para renderizar elementos visuales como puntos, vectores,
+mapas, escalas de profundidad y otros elementos gráficos del sistema.
+"""
+
 import cv2
 import numpy as np
 import random
@@ -8,6 +14,16 @@ from config import ConfiguracionGlobal
 from utils import depth_to_color, map_trans
 
 def dib_escala_profundidad(frame: np.ndarray, w: int, h: int, config: ConfiguracionGlobal):
+    """
+    Dibuja una barra de escala de profundidad en el frame.
+    Muestra un gradiente de color que representa la profundidad (cerca=rojo, lejos=azul).
+    
+    Args:
+        frame: Imagen BGR donde dibujar la escala
+        w: Ancho del frame
+        h: Alto del frame
+        config: Configuración con rangos MIN_DEPTH_CM y MAX_DEPTH_CM
+    """
     BAR_W, BAR_H = 50, 300
     BAR_X = w - BAR_W - 20
     BAR_Y = max(10, h // 2 - BAR_H // 2)
@@ -26,6 +42,22 @@ def dib_escala_profundidad(frame: np.ndarray, w: int, h: int, config: Configurac
 
 
 def dib_mov(frame: np.ndarray, objs: List[Dict[str, Any]], w: int, h: int, depth_cm: float, config: ConfiguracionGlobal, mostrar_vector: bool = True) -> Tuple[float, float, np.ndarray]:
+    """
+    Dibuja objetos trackeados y sus vectores de movimiento en el frame.
+    Calcula velocidad promedio y retorna imagen limpia de la zona izquierda.
+    
+    Args:
+        frame: Imagen BGR donde dibujar
+        objs: Lista de objetos trackeados
+        w: Ancho del frame
+        h: Alto del frame
+        depth_cm: Profundidad promedio actual
+        config: Configuración global
+        mostrar_vector: Si True, dibuja vectores de movimiento
+    
+    Returns:
+        Tupla de (velocidad_x, velocidad_y, imagen_limpia)
+    """
     vels_t = []
 
     objs_estables = [obj for obj in objs if obj['supervivencia_fr'] >= config.MIN_SUPERVIVENCIA_FR]
