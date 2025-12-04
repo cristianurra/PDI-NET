@@ -35,22 +35,27 @@ El programa se prepara para comenzar el procesamiento.
 
 ***
 
-### II. Bucle Principal por Frame (Ciclo Iterativo)
+### II. Bucle Principal por Frame (Ciclo Real – Versión Corregida 2025)
 
-Este ciclo se repite para cada imagen del video (`while ret`):
+Este es el flujo exacto que se ejecuta en cada iteración dentro de `ProcesadorEstereoThread.run()` (gui.py), tal como funciona actualmente el sistema completo:
 
-| Paso | Módulo Clave | Descripción de la Acción |
-| :--- | :--- | :--- |
-| **1. Segmentación** | `stereo_processing.py` | La función `proc_seg` procesa el *frame* (gris, umbral, filtros) para generar una **imagen binaria** con los contornos de los objetos. |
-| **2. Detección Estéreo** | `stereo_processing.py` | La función `get_cns` **empareja** los contornos entre el ojo izquierdo y el derecho, aplicando las restricciones de línea Y y de disparidad. |
-| **3. Tracking y Profundidad**| `tracker.py` | El `Tracker` **predice** la posición, **asocia** los nuevos contornos, calcula la **profundidad** (`D = f*B/d`), y gestiona el historial y la supervivencia de los objetos. |
-| **4. Odometría Visual**| `drawing.py` + `main.py`| La función `dib_mov` calcula el **vector de movimiento general de la cámara** (en píxeles) promediando las velocidades de los objetos rastreados. |
-| **5. Actualización Global**| `main.py` | El movimiento en píxeles se convierte a centímetros (`CM_POR_PX`) y se usa para actualizar la **posición global** . |
-| **6. Mapeo** | `main.py` + `utils.py` | La posición global determina la celda del *grid*. Se usan **`normalize_cell_view`** y **`register_image_to_map`** para actualizar la vista guardada en el historial de celdas. |
-| **7. Dibujo (Overlay)** | `drawing.py` | Se dibujan sobre el *frame*: las líneas de ayuda, los puntos de objeto (coloreados por profundidad) y la flecha de movimiento de la cámara. |
-| **8. Renderizado Final**| `drawing.py` | La función `dib_map` genera la imagen del mapa 2D. Finalmente, **`show_compuesta`** une los tres componentes (detección, segmentación y mapa) en una única interfaz. |
+| Paso | Módulo / Clase                  | Acción Realizada                                                                                             | Notas importantes |
+|------|---------------------------------|---------------------------------------------------------------------------------------------------------------|-------------------|
+| **1** | `stereo_processing`             | `proc_seg(frame_left)` → máscara binaria limpia de objetos en vista izquierda                                 | Puede usar CUDA si está activado |
+| **2** | `stereo_processing`             | `get_cns(frame_estéreo, máscara)` → matching estéreo → lista de `(centroide_izq, centroide_der, disparidad)` | Restricción epipolar + rango de disparidad |
+| **3** | `tracker.py`                    | `tracker.update_and_get(matched_cns_pairs)` → <br>• Predicción por mediana de velocidades <br>• Asociación greedy <br>• Cálculo de profundidad 3D: $ D = \frac{f \cdot B}{d} $ <br>• Gestión de supervivencia y eliminación de estáticos | Tracker clásico “por supervivencia” (sin YOLO) |
+| **4** | `yolo_tracker.py` (opcional)    | Si `YOLO_TRACKING_ENABLED=True` → `yolo_tracker.track_frame(frame_left)` → detecciones + vectores de movimiento | BoT-SORT + clases 0=Borde, 1=Nudo |
+| **5** | `visual_odometry.py`            | `visual_odometry.update(vectores_x, vectores_y)` (de YOLO o del tracker clásico) → odometría suave con aceleración/fricción | Usa `CM_POR_PX`, `YOLO_ACCELERATION`, `YOLO_FRICTION` |
+| **6** | `anomaly_detector.py`           | `damage_detector.detect(frame_left)` → detección y tracking temporal de agujeros anómalos en la malla          | Estadística local + confirmación multi-frame |
+| **7** | `drawing.py` – `dib_ayu`        | Dibuja rejilla, línea central y cuadrantes activos (`Q_ACT_BASE`)                                             | Ayudas de calibración |
+| **8** | `drawing.py` – `dib_mov`        | Dibuja puntos rastreados (coloreados por profundidad) + vector promedio de cámara (mediana robusta)           | Devuelve velocidad cámara en píxeles |
+| **9** | `drawing.py` – `dib_escala_profundidad` | Barra lateral de profundidad (rojo=cerca → azul=lejos)                                                | Siempre visible |
+| **10**| `visual_odometry.py` + `drawing.py` | `AdaptiveTrajectoryDrawer.draw(...)` → gráfico adaptativo con: <br>• Trayectoria YOLO (verde) <br> Trayectoria Supervivencia (azul) <br> Marcadores detectados (rojo/magenta) | El más visual y útil |
+| **11**| `mapper.py` + `drawing.py`      | `GlobalMapper2D` actualiza celda actual → `dib_map()` genera mapa 2D acumulado con imágenes de celdas         | Escala dinámica (`map_trans`) |
+| **12**| `gui.py` – `actualizar_gui()`   | Envía a la interfaz Tkinter: <br>• Video (mono o estéreo) <br>• Máscara binaria <br>• Mapa posición <br>• Mapa radar <br>• Gráfico odometría <br>• Labels de profundidad, posición, ángulo, frame/FPS | Todo redimensionado con LANCZOS |
+| **13**| Registro y exportación          | • `damage_log` ← daños confirmados <br>• `matrices_yolo` / `matrices_supervivencia` ← poses 4×4 <br>• Marcadores YOLO contados al cruzar tercio central | Preparado para CSV y Open3D |
 
-***
+#### Resumen visual del flujo actual (2025)
 
 ![Imagen binaria](https://github.com/cristianurra/PDI-NET/blob/main/imagenes/threshold.png)
 ![Imagen Stereo](https://github.com/cristianurra/PDI-NET/blob/main/imagenes/stereo.png)
