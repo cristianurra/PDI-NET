@@ -512,6 +512,27 @@ Módulo encargado del **seguimiento de objetos con YOLOv11 + BoT-SORT**, especia
 annotated_frame, vectors_x, vectors_y, detections = tracker.track_frame(frame_left)
 
 
+### 6. `visual_odometry.py` 
+Módulo dedicado al cálculo y visualización de **odometría visual** basada en el movimiento de objetos rastreados.
+
+#### Clase principal: `VisualOdometry`
+
+**Responsabilidad**:  
+Convertir vectores de movimiento de objetos (en píxeles) en una estimación de movimiento de la cámara (en centímetros), con suavizado físico realista.
+
+**Características clave**:
+
+| Funcionalidad                        | Implementación                                                                 |
+|--------------------------------------|---------------------------------------------------------------------------------|
+| Estimación de velocidad              | `velocidad_cámara = -movimiento_objetos` (flujo óptico inverso)                 |
+| Conversión píxeles → cm              | Usa `CM_POR_PX` del config (escala real calibrada)                              |
+| Suavizado de aceleración             | Factor `YOLO_ACCELERATION` → movimiento progresivo y natural                   |
+| Fricción / inercia                   | Cuando no hay objetos → velocidad decae con `YOLO_FRICTION`                    |
+| Estado visual                        | "TRACKING ACTIVO" (verde) / "INERCIA" (amarillo)                                |
+| Historial de trayectoria             | Almacena todas las posiciones para dibujo persistente                           |
+
+**Método principal**:
+vo.update(vectors_x, vectors_y)   # Recibe listas de dx/dy desde YOLOTracker o tracker clásico
 
 ### 6. `main.py` (Bucle Principal)
 
