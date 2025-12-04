@@ -512,7 +512,7 @@ Módulo encargado del **seguimiento de objetos con YOLOv11 + BoT-SORT**, especia
 annotated_frame, vectors_x, vectors_y, detections = tracker.track_frame(frame_left)
 
 
-### 6. `visual_odometry.py` 
+### 8. `visual_odometry.py` 
 Módulo dedicado al cálculo y visualización de **odometría visual** basada en el movimiento de objetos rastreados.
 
 #### Clase principal: `VisualOdometry`
@@ -533,6 +533,61 @@ Convertir vectores de movimiento de objetos (en píxeles) en una estimación de 
 
 **Método principal**:
 vo.update(vectors_x, vectors_y)   # Recibe listas de dx/dy desde YOLOTracker o tracker clásico
+
+
+### 9. `anomaly_detector.py`
+
+Este módulo sirve para la **detección automática de daños (roturas, agujeros)** 
+
+#### Clase principal: `DamageDetector`
+
+**Objetivo**:  
+Identificar agujeros anómalos (daños) en una malla/red comparando el tamaño de los huecos detectados con el patrón estadístico local de la estructura.
+
+**Pipeline completo (muy robusto)**:
+
+| Etapa                              | Técnica aplicada                                                                 |
+|------------------------------------|-----------------------------------------------------------------------------------|
+| 1. Preprocesamiento                | Conversión a espacio Lab → canal L (luminancia)                                   |
+| 2. Umbralización adaptativa        | `ADAPTIVE_THRESH_MEAN_C` (blockSize=19) → resistente a sombras e iluminación     |
+| 3. Corrección de polaridad         | Si más del 50% es blanco → invertir (funciona tanto con malla clara como oscura) |
+| 4. Selección de la red principal   | Componente conectado más grande → máscara de la malla (`net_mask`)               |
+| 5. Cierre morfológico              | Kernel elíptico 11×11 → une pequeñas rupturas reales                              |
+| 6. Máscara de agujeros             | `holes_mask = ~net_mask` + borde negro para eliminar falsos positivos en bordes |
+| 7. Detección de agujeros           | `connectedComponentsWithStats` → estadísticas completas de cada hueco            |
+| 8. Filtrado geométrico             | Descarta agujeros que tocan el borde del frame                                    |
+| 9. Análisis estadístico            | Cálculo de media y desviación típica del área de los agujeros normales           |
+|10. Umbral dinámico de anomalía     | `threshold = mean + z_factor × std` con `z_factor` creciente según número de agujeros |
+|11. Validación local                | Un agujero solo es candidato si su área > `DMG_THRESHOLD × área_máxima_vecina`   |
+|12. Tracking temporal               | Asociación 1-a-1 entre frames usando distancia euclidiana                         |
+|13. Confirmación final              | Solo se reporta como daño si persiste al menos `DMG_FRAMES` frames consecutivos  |
+
+**Parámetros clave (config)**:
+| Parámetro              | Uso                                                      |
+|------------------------|----------------------------------------------------------|
+| `DMG_ALPHA`            | Controla crecimiento del umbral con número de agujeros   |
+| `DMG_NUM_NB`           | Número de vecinos considerados para validación local     |
+| `DMG_FRAMES`           | Frames mínimos de persistencia para confirmar daño       |
+| `DMG_THRESHOLD`        | Factor (ej. 2.5) para comparar con el mayor vecino       |
+| `DMG_DIST_TRACK`       | Distancia máxima para asociar daño entre frames          |
+
+**Salida**:
+```python
+frame_con_daños, lista_daños_confirmados = detector.detect(frame)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ### 6. `main.py` (Bucle Principal)
 
