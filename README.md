@@ -1,4 +1,17 @@
-# PDI-NET - Procesamiento de Imágenes Estéreo
+# Procesamiento de Imágenes Estéreo
+
+Integrantes:
+
+Daniela Stuven
+
+Yohanns Jara
+
+Iván Montiel
+
+Juan Villalón
+
+Cristhian Urra
+
 
 ## 🎥 Demo
 
