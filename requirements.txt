@@ -4,5 +4,7 @@ numpy
 tqdm
 ultralytics
 open3d
+nvidia-ml-py
+psutil
 #pyzed==3.8
 # Nota : pyzed est á comentado para evitar errores si no tiene el SDK instalado .
