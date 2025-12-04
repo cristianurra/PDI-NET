@@ -4,5 +4,11 @@ numpy
 tqdm
 ultralytics
 open3d
+psutil
+pandas
+matplotlib
+seaborn
+scipy
+#pynvml  # Opcional: para monitoreo de GPU NVIDIA
 #pyzed==3.8
-# Nota : pyzed est á comentado para evitar errores si no tiene el SDK instalado .
+# Nota : pyzed está comentado para evitar errores si no tiene el SDK instalado .

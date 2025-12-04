@@ -12,6 +12,7 @@ img/capturas*
 # Distribution / packaging
 build/
 dist/
+report/*
 *.egg-info/
 *.egg
 pip-wheel-metadata/

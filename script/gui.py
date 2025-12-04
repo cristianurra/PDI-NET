@@ -11,6 +11,12 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 from PIL import Image, ImageTk
 from typing import List, Tuple, Dict, Any
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    print("⚠️ psutil no disponible. Monitoreo de recursos deshabilitado.")
 
 from config import ConfiguracionGlobal
 from mapper import GlobalMapper2D
@@ -92,6 +98,16 @@ class ProcesadorEstereoThread(threading.Thread):
         # Metadatos de la sesión
         self.session_start_time = datetime.now()
         self.frames_procesados = 0
+        self.camera_info = None  # Información de la cámara ZED (si es SVO)
+        
+        # Variables para monitoreo de recursos
+        self.cpu_percent = 0.0
+        self.cpu_avg = 0.0
+        self.gpu_percent = 0.0
+        self.gpu_avg = 0.0
+        self.ram_mb = 0.0
+        self.ram_avg = 0.0
+        self.resource_samples = []  # Lista de muestras para promedios
 
     def stop(self):
         print("[STOP] Solicitando detención del thread...")
@@ -135,7 +151,14 @@ class ProcesadorEstereoThread(threading.Thread):
                 f.write(f"Fotogramas totales: {self.total_frames}\n")
                 f.write(f"Fotogramas procesados: {self.frames_procesados}\n")
                 f.write(f"Frame inicial: {self.config.START_FRAME}\n")
-                f.write(f"Skip rate: {self.config.SKIP_RATE}\n\n")
+                f.write(f"Skip rate: {self.config.SKIP_RATE}\n")
+                
+                # Información de la cámara ZED (si es SVO)
+                if self.camera_info:
+                    f.write(f"\n--- INFORMACIÓN DE LA CÁMARA ZED ---\n")
+                    for key, value in self.camera_info.items():
+                        f.write(f"{key}: {value}\n")
+                f.write("\n")
                 
                 # Información del sistema
                 f.write("--- INFORMACIÓN DEL EQUIPO ---\n")
@@ -144,8 +167,8 @@ class ProcesadorEstereoThread(threading.Thread):
                 f.write(f"Arquitectura: {platform.machine()}\n")
                 f.write(f"Python: {platform.python_version()}\n")
                 try:
-                    import cv2
-                    f.write(f"OpenCV: {cv2.__version__}\n")
+                    import cv2 as cv2_check
+                    f.write(f"OpenCV: {cv2_check.__version__}\n")
                 except:
                     pass
                 f.write("\n")
@@ -155,13 +178,17 @@ class ProcesadorEstereoThread(threading.Thread):
                 f.write(f"Inicio: {self.session_start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"Fin: {session_end_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"Duración: {duracion_sesion:.2f} segundos ({duracion_sesion/60:.2f} minutos)\n")
-                f.write(f"FPS promedio: {self.fps_average:.2f}\n\n")
+                f.write(f"FPS promedio: {self.fps_average:.2f}\n")
+                if self.resource_samples:
+                    f.write(f"CPU promedio: {self.cpu_avg:.1f}%\n")
+                    f.write(f"GPU promedio: {self.gpu_avg:.1f}%\n")
+                    f.write(f"RAM promedio: {self.ram_avg:.1f} MB\n")
+                f.write("\n")
                 
                 # Configuración de tracking
                 f.write("--- CONFIGURACIÓN DE TRACKING ---\n")
                 f.write(f"Sistema de capturas: {self.config.SISTEMA_CAPTURAS_AUTO}\n")
                 f.write(f"YOLO tracking: {'Activado' if self.config.YOLO_TRACKING_ENABLED else 'Desactivado'}\n")
-                f.write(f"Profundidad estéreo: {'Activado' if self.config.PROFUNDIDAD_ESTEREO else 'Desactivado'}\n")
                 f.write(f"Vector supervivencia: {'Visible' if self.config.MOSTRAR_VECTOR_SUPERVIVENCIA else 'Oculto'}\n")
                 f.write(f"Vector YOLO: {'Visible' if self.config.MOSTRAR_VECTOR_YOLO else 'Oculto'}\n\n")
                 
@@ -238,6 +265,32 @@ class ProcesadorEstereoThread(threading.Thread):
                 
                 print(f"✓ Guardadas {len(self.hist_celdas_vis)} imágenes en {images_dir}")
             
+            # 5. EJECUTAR ANÁLISIS ESTADÍSTICO AUTOMÁTICO
+            print(f"\n{'='*60}")
+            print(f"📊 EJECUTANDO ANÁLISIS ESTADÍSTICO AUTOMÁTICO...")
+            print(f"{'='*60}")
+            
+            try:
+                from statistical_analysis import ejecutar_analisis_sesion
+                
+                # Solo ejecutar si hay mediciones
+                if len(self.mediciones_marcadores) > 0:
+                    exito_analisis = ejecutar_analisis_sesion(self.session_folder)
+                    
+                    if exito_analisis:
+                        print(f"\n✅ Análisis estadístico completado exitosamente")
+                    else:
+                        print(f"\n⚠️ El análisis estadístico no se pudo completar")
+                else:
+                    print(f"\n⚠️ No hay mediciones de marcadores, se omite análisis estadístico")
+                    
+            except ImportError as ie:
+                print(f"\n⚠️ Módulo de análisis no disponible: {ie}")
+            except Exception as e_analisis:
+                import traceback
+                print(f"\n❌ Error durante análisis estadístico: {e_analisis}")
+                traceback.print_exc()
+            
             print(f"\n{'='*60}")
             print(f"✅ TODOS LOS DATOS GUARDADOS EN: {self.session_folder}")
             print(f"{'='*60}\n")
@@ -296,6 +349,29 @@ class ProcesadorEstereoThread(threading.Thread):
             if frame_generator is None or w == 0:
                 self.gui_ref.root.after(0, lambda: messagebox.showerror("Error", "Error al abrir."))
                 return
+            
+            # Extraer información de la cámara ZED
+            try:
+                import pyzed.sl as sl
+                zed_temp = sl.Camera()
+                init_params = sl.InitParameters()
+                init_params.set_from_svo_file(self.config.NOM_VID)
+                if zed_temp.open(init_params) == sl.ERROR_CODE.SUCCESS:
+                    cam_info = zed_temp.get_camera_information()
+                    self.camera_info = {
+                        'Modelo': str(cam_info.camera_model),
+                        'Número de serie': cam_info.serial_number,
+                        'Resolución': f"{cam_info.camera_resolution.width}x{cam_info.camera_resolution.height}",
+                        'FPS': cam_info.camera_fps,
+                        'Firmware': f"{cam_info.camera_firmware_version}",
+                    }
+                    # Obtener información de calibración
+                    calib = cam_info.calibration_parameters
+                    self.camera_info['Baseline'] = f"{calib.get_camera_baseline():.2f} mm"
+                    self.camera_info['Focal izquierda'] = f"fx={calib.left_cam.fx:.2f}, fy={calib.left_cam.fy:.2f}"
+                    zed_temp.close()
+            except Exception as e:
+                print(f"⚠️ No se pudo extraer información de la cámara ZED: {e}")
         else:
             cap = cv2.VideoCapture(self.config.NOM_VID)
             if not cap.isOpened():
@@ -348,6 +424,88 @@ class ProcesadorEstereoThread(threading.Thread):
                 # Calcular FPS promedio
                 avg_frame_time = sum(self.fps_frame_times) / len(self.fps_frame_times)
                 self.fps_average = 1.0 / avg_frame_time if avg_frame_time > 0 else 0.0
+            
+            # Monitorear recursos del sistema
+            if PSUTIL_AVAILABLE:
+                try:
+                    # Obtener el proceso de Python actual (no el thread)
+                    if not hasattr(self, 'process_monitor'):
+                        self.process_monitor = psutil.Process(os.getpid())
+                        # Primera llamada para inicializar el monitoreo
+                        self.process_monitor.cpu_percent(interval=None)
+                        self.cpu_percent = 0.0
+                        self.cpu_initialized = True
+                        # Obtener número de CPUs para normalizar
+                        self.cpu_count = psutil.cpu_count()
+                    
+                    process = self.process_monitor
+                    
+                    # CPU - usar intervalo None para calcular desde la última llamada
+                    # En sistemas multi-core, el valor puede ser > 100%
+                    # Por ejemplo, si usa 2 cores al 100%, retorna 200%
+                    cpu_val = process.cpu_percent(interval=None)
+                    
+                    # Normalizar: dividir por número de CPUs para mostrar porcentaje real
+                    # Ejemplo: 200% en 8 CPUs = 25% de uso total del sistema
+                    self.cpu_percent = cpu_val / self.cpu_count if self.cpu_count > 0 else cpu_val
+                    
+                    # RAM (en MB)
+                    mem_info = process.memory_info()
+                    self.ram_mb = mem_info.rss / (1024 * 1024)  # Bytes a MB
+                    
+                    # GPU (si está disponible via nvidia-smi o similar)
+                    if not hasattr(self, 'gpu_check_failed'):
+                        try:
+                            import pynvml
+                            if not hasattr(self, 'nvml_initialized'):
+                                pynvml.nvmlInit()
+                                self.nvml_initialized = True
+                                self.gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                                print(f"✓ GPU NVIDIA detectada y monitoreo inicializado")
+                            
+                            gpu_util = pynvml.nvmlDeviceGetUtilizationRates(self.gpu_handle)
+                            self.gpu_percent = float(gpu_util.gpu)
+                        except ImportError:
+                            # pynvml no está instalado
+                            self.gpu_percent = 0.0
+                            self.gpu_check_failed = True
+                            print("⚠️ pynvml no instalado. GPU no se monitoreará (instala con: pip install nvidia-ml-py)")
+                        except Exception as e:
+                            # GPU no disponible o no es NVIDIA
+                            self.gpu_percent = 0.0
+                            self.gpu_check_failed = True
+                            print(f"⚠️ GPU no disponible o no es NVIDIA: {e}")
+                    else:
+                        self.gpu_percent = 0.0
+                    
+                    # Guardar muestra para promedio
+                    self.resource_samples.append({
+                        'cpu': self.cpu_percent,
+                        'gpu': self.gpu_percent,
+                        'ram': self.ram_mb
+                    })
+                    
+                    # Mantener últimas 30 muestras
+                    if len(self.resource_samples) > 30:
+                        self.resource_samples.pop(0)
+                    
+                    # Calcular promedios
+                    if self.resource_samples:
+                        self.cpu_avg = sum(s['cpu'] for s in self.resource_samples) / len(self.resource_samples)
+                        self.gpu_avg = sum(s['gpu'] for s in self.resource_samples) / len(self.resource_samples)
+                        self.ram_avg = sum(s['ram'] for s in self.resource_samples) / len(self.resource_samples)
+                    
+                    # Debug: imprimir cada 100 frames para verificar
+                    if frame_counter % 100 == 0 and frame_counter > 0:
+                        print(f"[DEBUG] CPU: {self.cpu_percent:.1f}%, GPU: {self.gpu_percent:.1f}%, RAM: {self.ram_mb:.0f} MB")
+                        
+                except Exception as e:
+                    # Debug: mostrar error solo la primera vez
+                    if not hasattr(self, 'resource_error_shown'):
+                        print(f"⚠️ Error monitoreando recursos: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        self.resource_error_shown = True
 
             if frame_counter % self.config.SKIP_RATE == 0:
 
@@ -704,7 +862,7 @@ class ProcesadorEstereoThread(threading.Thread):
                     markers=self.yolo_markers  # Pasar marcadores YOLO
                 )
                 
-                # Dibujar FPS en la esquina superior izquierda (ANTES de enviar a GUI)
+                # Dibujar FPS y recursos en la esquina superior izquierda (ANTES de enviar a GUI)
                 fps_text_current = f"FPS: {self.fps_current:.1f}"
                 fps_text_avg = f"Avg: {self.fps_average:.1f}"
                 # Usar tamaño de fuente más grande (0.8) y grosor 2 para mejor visibilidad
@@ -712,6 +870,22 @@ class ProcesadorEstereoThread(threading.Thread):
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
                 draw_text_with_shadow(frame_top, fps_text_avg, (10, 65), 
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                
+                # Dibujar recursos del sistema (si están disponibles)
+                if PSUTIL_AVAILABLE:
+                    y_offset = 100
+                    draw_text_with_shadow(frame_top, f"CPU: {self.cpu_percent:.1f}%", (10, y_offset), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                    draw_text_with_shadow(frame_top, f"CPU Avg: {self.cpu_avg:.1f}%", (10, y_offset+35), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                    draw_text_with_shadow(frame_top, f"GPU: {self.gpu_percent:.1f}%", (10, y_offset+70), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                    draw_text_with_shadow(frame_top, f"GPU Avg: {self.gpu_avg:.1f}%", (10, y_offset+105), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                    draw_text_with_shadow(frame_top, f"RAM: {self.ram_mb:.0f} MB", (10, y_offset+140), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                    draw_text_with_shadow(frame_top, f"RAM Avg: {self.ram_avg:.0f} MB", (10, y_offset+175), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
                 
                 self.gui_ref.root.after(0, self.gui_ref.actualizar_gui, frame_top, cns_filt_left_eye, canv_m, map_radar, odometry_graph, depth_cm, display_pos_x, display_pos_y, self.mapeo.global_angle, self.current_frame, self.total_frames)
             
@@ -1145,7 +1319,6 @@ class StereoAppTkinter:
     
     def show_3d_map(self):
         """Abre el visualizador 3D de trayectorias."""
-        import threading
         
         def visualize():
             try:
@@ -1188,8 +1361,8 @@ class StereoAppTkinter:
                             position = np_matrix[:3, 3]
                             # Filtrar puntos en el origen (0,0,0) - sin movimiento
                             if not (abs(position[0]) < 0.001 and abs(position[1]) < 0.001 and abs(position[2]) < 0.001):
-                                # Amplificar x10 para mejor visualización
-                                points_yolo.append(position * 10.0)
+                                # Amplificar x10 y revertir Y (que fue invertida al guardar)
+                                points_yolo.append([position[0] * 10.0, -position[1] * 10.0, position[2] * 10.0])
                         
                         num_yolo_valid = len(points_yolo)
                         print(f"DEBUG YOLO: {num_yolo} frames totales, {num_yolo_valid} con movimiento (amplificado x10)")
@@ -1241,8 +1414,8 @@ class StereoAppTkinter:
                             position = np_matrix[:3, 3]
                             # Filtrar puntos en el origen (0,0,0) - sin movimiento
                             if not (abs(position[0]) < 0.001 and abs(position[1]) < 0.001 and abs(position[2]) < 0.001):
-                                # Amplificar x10 para mejor visualización
-                                points_superv.append(position * 10.0)
+                                # Amplificar x10 y revertir Y (que fue invertida al guardar)
+                                points_superv.append([position[0] * 10.0, -position[1] * 10.0, position[2] * 10.0])
                         
                         num_superv_valid = len(points_superv)
                         print(f"DEBUG Supervivencia: {num_superv} frames totales, {num_superv_valid} con movimiento (amplificado x10)")
@@ -1336,28 +1509,55 @@ class StereoAppTkinter:
                     if num_markers > 0:
                         print(f"  🎯 {num_markers} marcadores (Rojo=Borde, Magenta=Nudo)")
                     print(f"{'='*60}\n")
-                    o3d.visualization.draw_geometries(
-                        geometries, 
+                    
+                    # Usar Visualizer en lugar de draw_geometries para mejor control
+                    vis = o3d.visualization.Visualizer()
+                    vis.create_window(
                         window_name="Trayectorias 3D - Verde: YOLO | Azul: Supervivencia",
-                        width=1280, 
+                        width=1280,
                         height=720,
                         left=100,
                         top=100
                     )
+                    
+                    # Agregar todas las geometrías
+                    for geom in geometries:
+                        vis.add_geometry(geom)
+                    
+                    # Configurar opciones de renderizado
+                    opt = vis.get_render_option()
+                    opt.background_color = np.asarray([0.1, 0.1, 0.1])  # Fondo gris oscuro
+                    opt.point_size = 5.0
+                    opt.line_width = 2.0
+                    
+                    # Configurar vista inicial
+                    ctr = vis.get_view_control()
+                    ctr.set_zoom(0.5)
+                    ctr.set_front([0, 0, -1])  # Mirar desde arriba
+                    ctr.set_up([0, 1, 0])  # Y hacia arriba
+                    
+                    # Ejecutar visualizador
+                    vis.run()
+                    vis.destroy_window()
+                    
+                    print("✓ Visor 3D cerrado correctamente")
+                    
                 else:
-                    messagebox.showwarning("Sin datos", "No hay datos de tracking para visualizar.\nProcesa primero algunos frames.")
+                    self.root.after(0, lambda: messagebox.showwarning("Sin datos", "No hay datos de tracking para visualizar.\nProcesa primero algunos frames."))
             
             except ImportError:
-                messagebox.showerror("Error", "Open3D no está instalado.\nEjecuta: pip install open3d")
+                self.root.after(0, lambda: messagebox.showerror("Error", "Open3D no está instalado.\nEjecuta: pip install open3d"))
             except Exception as e:
                 import traceback
                 error_msg = f"Error al visualizar mapa 3D:\n{str(e)}\n\n{traceback.format_exc()}"
                 print(error_msg)
-                messagebox.showerror("Error", error_msg)
+                self.root.after(0, lambda: messagebox.showerror("Error", error_msg))
         
-        # Ejecutar en thread separado para no bloquear GUI
-        thread = threading.Thread(target=visualize, daemon=True)
+        # Ejecutar en thread NO daemon para mejor cleanup
+        import threading
+        thread = threading.Thread(target=visualize, daemon=False)
         thread.start()
+
 
     def actualizar_gui(self, frame_top: np.ndarray, cns_filt_left_eye: np.ndarray, canv_m: np.ndarray, map_radar: np.ndarray, odometry_graph: np.ndarray, depth_cm: float, pos_m_x: float, pos_m_y: float, global_angle: float, current_frame: int = 0, total_frames: int = 0):
 
