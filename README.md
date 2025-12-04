@@ -388,6 +388,35 @@ Permite el seguimiento de puntos basado en el tiempo de superviciencia y la dife
 
 ### 5. `drawing.py` (Visualización)
 
+Módulo dedicado a toda la **visualización en tiempo real** del sistema: vistas estéreo, vectores de movimiento, escala de profundidad y mapa 2D acumulado.
+
+#### Funciones principales
+
+| Función                        | Propósito                                                                                     | Características destacadas |
+|--------------------------------|-------------------------------------------------------------------------------------------------------|------------------------|
+| `dib_escala_profundidad`       | Dibuja una **barra vertical de colores** que representa el rango de profundidad (rojo = cerca, azul = lejos) | Usa `depth_to_color()` para gradiente continuo |
+| `dib_mov`                      | Dibuja en las vistas estéreo: <br>• Puntos rastreados (izquierda + derecha)<br>• Vector promedio de movimiento de la cámara | - Filtra solo objetos estables (`MIN_SUPERVIVENCIA_FR`)<br>- Muestra solo un % configurable (`PORC_MOS`)<br>- Devuelve velocidad estimada de la cámara (mediana robusta)<br>- Opción de desactivar vector |
+| `dib_vector_yolo`              | Dibuja el **vector de odometría YOLO** en vista monocular (parte inferior)                     | - Solo se muestra si hay movimiento significativo<br>- Color amarillo-cian distintivo |
+| `dib_ayu`                      | Dibuja **ayudas visuales** sobre el frame estéreo: <br>• Línea central vertical<br>• Rejilla Q_X × Q_Y<br>• Cuadrantes activos (`Q_ACT_BASE`) en verde | Útil para calibración y depuración |
+| `dib_map`                      | Renderiza el **mapa 2D acumulado** del entorno explorado                                      | - Usa transformación dinámica (`map_trans`) para centrar y escalar<br>- Inserta imágenes normalizadas de cada celda visitada<br>- Dibuja posición actual y rectángulo de vista actual<br>- Panel informativo con coordenadas y escala real<br>- Manejo robusto de errores de redimensionado |
+
+#### Detalles de implementación notables
+
+- Todo el dibujo se hace directamente con **OpenCV** (sin dependencias externas).
+- El mapa acumulado es **persistente**: cada celda guarda su imagen capturada + profundidad media.
+- Escalado inteligente del mapa: se adapta automáticamente al área explorada usando `map_trans`.
+- Visualización de velocidad de cámara **robusta**: mediana de velocidades de objetos estables → ignora outliers.
+- Muestra solo una fracción configurable de puntos rastreados → evita saturación visual.
+- Barra de profundidad siempre visible → referencia inmediata de distancia.
+
+#### Uso típico en el pipeline principal
+frame = dib_ayu(frame, ...)                    # rejilla + zonas activas
+dib_escala_profundidad(frame, ...)             # barra de color
+vx, vy, clean_img = dib_mov(frame, tracker.objs, ...)  # puntos + vector cámara
+dib_vector_yolo(frame_mono, ..., vx_yolo, vy_yolo)     # odometría YOLO
+map_img = dib_map(hist_celdas, pos_x, pos_y, ...)      # mapa acumulado
+
+
 ### 6. `main.py` (Bucle Principal)
 
 ### 7. `corrección` (Video de Entrada Recodificado)
