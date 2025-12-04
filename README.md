@@ -572,7 +572,6 @@ Identificar agujeros anómalos (daños) en una malla/red comparando el tamaño d
 | `DMG_DIST_TRACK`       | Distancia máxima para asociar daño entre frames          |
 
 **Salida**:
-```python
 frame_con_daños, lista_daños_confirmados = detector.detect(frame)
 
 
