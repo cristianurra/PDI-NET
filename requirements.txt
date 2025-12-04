@@ -9,6 +9,6 @@ pandas
 matplotlib
 seaborn
 scipy
-#pynvml  # Opcional: para monitoreo de GPU NVIDIA
+nvidia-ml-py
 #pyzed==3.8
 # Nota : pyzed está comentado para evitar errores si no tiene el SDK instalado .
